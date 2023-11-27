@@ -25,7 +25,7 @@ KEGGChem is a simple web scraper of the KEGG API, that extracts information from
 
 options:
   -h, --help            show this help message and exit
-  -m {ko,module,compound,reaction,mdata}, --mode {ko,module,compound,reaction,mdata}
+  -m, --mode {ko,module,compound,reaction,mdata}
                         The mode to run KEGGChem in. Select either 'ko' or 'module' to search for compounds using either ko or module codes as input. Use 'compound' or 'reaction' mode to download related data from listed data entries.
   -f , --file           The input file
   -o , --out            The output directory to be used. If this argument is not used, then a default directory will be created using the input filename + '_output'.
