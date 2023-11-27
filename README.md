@@ -79,7 +79,8 @@ SDF files can be downloaded from PubChem using the ```--sdf``` argument. This re
 
 
 ## Legal
-The author of these scripts is not associated with, nor endorsed by the KEGG team in any way.
+KEGGChem is published under a MIT license (details in license.txt). 
+Neither the author nor KEGGChem is not associated with, nor endorsed by the KEGG team in any way. Please abide by the copyright and licensing terms of the KEGG program and associated programs as described by their products. 
 
 
 
