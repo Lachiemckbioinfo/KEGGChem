@@ -89,4 +89,6 @@ Lachlan McKinnie
 
 ORCiD: [0000-0002-4996-5941](https://orcid.org/0000-0002-4996-5941)
 
+This program was written as part of a PhD project at the University of the Sunshine Coast, which was supervised by Dr Min Zhao, Professor Scott Cummins, and Dr Sankar Subramanian.
+
 
