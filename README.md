@@ -56,9 +56,10 @@ Running KEGGChem on module mode will output the results
 The module mode will output the results into a single summary file and a subdirectory titled "Results". The summary file will summaries the number of modules given and the number of unique compounds retrieved, as well as the total number of times each compound was retrieved. The "Results" subdirectory will contain files for each module showing the compounds retrieved in the format of <module>: <compound>, <compound>, <compound>, and so on. There will also be a file containing the results for all modules together in a single file called all_results.txt
 
 ### compound
-Compound mode is a convenience script function that retrieves the formula for each given KEGG compound. 
+Compound mode retrieves data related to KEGG compounds from the KEGG database. This includes the molecular formula, molecular weight, and exact mass. This can be further expanded using the ```--structure``` argument, which downloads .mol and .kcf files as well. This mode also be expanded with PubChemPy integratration using the ```--pubchem``` argument, which searches for SID and CID codes and associated data, as well as the ```--sdf``` command, which downloads sdf files from PubChem.
 
-Results are outputted in a .txt file in the format of KEGG compound:compound formula. Compounds without formulas will have their formula result be NULL.
+### reaction
+Reaction mode retrieves data related to KEGG reaction entries, including definitions, molecular equations, listed KO codes, reaction pathways and reaction classes.
 
 ## Other Arguments
  
@@ -69,8 +70,7 @@ The input file command (`-f` or `--file`) is a required option. All three modes 
 The output directory, or out option (`-o` or `--out`) is an optional argument that sets the output directory. When run, KEGGChem will output the results in the given directory, and will create the directory if necessary. If no outdir is specified, KEGGChem will create a directory using the name of the input file plus "_output". 
 
 ### Structure
- Compound .mol and .kcf files can be downloaded from the KEGG database using the structure argument (`-s` or `--structure`). These are saved in the KEGG_downloads directory, and local versions will be saved in the results directory. This command cannot be used with the compound or reaction modes. 
-
+ Compound .mol and .kcf files can be downloaded from the KEGG database using the structure argument (`-s` or `--structure`). These are saved in the KEGG_downloads directory, and local versions will be saved in the results directory. This argument requires KEGGChem to be run on module mode.
 ### Pubchem
 Using the ```--pubchem``` arguement enables KEGGChem to retrieve data from Pubchem using PubChemPy, including SIDs (substance IDs), CIDs (compound IDs), and SMILES. This argument is required in order to use the ```--sdf``` argument. The SID search will search each compound for SID codes, and each SID for CID codes. CIDs are then searched for molecular formulas, and both canonical and isomeric SMILES. These results are saved in the "pubchem_substances.txt" and "pubchem_compounds.txt" files, respectively.
 
