@@ -87,7 +87,7 @@ KEGG genes can be downloaded from KEGG using the homolog argument (`--homolog`) 
 Gene homolog searches of the KEGG database can be further refined using the homolog-organism argument (`--homolog-organism`). There are three ways to use this argument:
 1. Input an organism code from the KEGG database. E.g., hsa, ggo, ptr. The input command would be `--homolog-organism hsa`.
 2. Input a file containing a list of organism codes from KEGG. For example: `--homolog-organism organism_list.txt`
-3. Input a keyword corresponding to a major category of organisms, as described by the KEGG organism list. These correspond to major categories of organisms, as well as important subgroups, including prokaryotes, eukaryotes, mammals, birds, bacteria, insects. These are not case sensitive. A list of keywords is below.
+3. Input a keyword corresponding to a major category of organisms, as described by the KEGG organism list. These correspond to major categories of organisms, as well as important subgroups, including prokaryotes, eukaryotes, mammals, birds, bacteria, insects. These are not case sensitive. Not all categories are included in this list. A list of keywords is below. If current organisms are required, please check the KEGG API to ensure you have the most most up-to-date data.
 
 **Organism keywords** (slashes indicate alternate spellings)
 + Prokaryotes/Prokaryota
@@ -105,12 +105,16 @@ Gene homolog searches of the KEGG database can be further refined using the homo
 + Fish/Fishes
 + Reptiles
 + Amphibians
++ Arthropods/Arthropoda
++ Nematodes
 + Insects
 + Molluscs/Mollusks
 + Crustaceans
 + Chelicerates
++ Echinoderms
 + Green_algae
 + Red_algae
++ Stramenopiles
 + Cnidaria
 + Eudicots
 + Monocots
@@ -118,7 +122,17 @@ Gene homolog searches of the KEGG database can be further refined using the homo
 + Ameobozoa
 + Alveolates
 + Acidobacteriota
++ Enterobacterales
 + Escherichia
++ Basidiomycetes
++ Ascomycetes
++ Actinomycetota
++ Chlamydiota
++ Alphaproteobacteria
++ Betaproteobacteria
++ Gammeproteobacteria/Other_Gammaproteobacteria
++ Ascomycetes
++ Basidiomycetes
 
 ## Legal
 KEGGChem is published under a MIT license (details in license.txt). 
