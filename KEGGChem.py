@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-#version 0.9
+#version 0.9.1
 
 import requests
 import re
-#import sys
+import sys
 import os
 from collections import Counter
 import argparse
@@ -17,6 +17,10 @@ github = "https://github.com/Lachiemckbioinfo/KEGGChem"
 citation = "XXXXX"
 #KEGGcitation = (f"KEGG citation goes here")
 appname = 'KEGGChem'
+syspath = sys.path[0]
+
+
+
 #Initiate argparse
 parser = argparse.ArgumentParser(
     prog = f'{appname}',
@@ -73,6 +77,26 @@ parser.add_argument("--sdf",
                     action = "store_true")
 
 
+#Retrieve genes
+parser.add_argument("--homolog",
+                    required = False,
+                    help = "Find genes on the KEGG database with the same KO codes. Requires --mode=ko. Default = False",
+                    action = "store_true")
+
+
+parser.add_argument("--homolog-organism",
+                    required = False,
+                    help = """
+                    Restrict the genes to be downloaded with the --homolog command. This can be done with one of the following options:
+                    -Input a KEGG organism code (e.g., hsa, ggo, ptr).
+                    -Input a file containing a list of KEGG organism codes.
+                    -Input a search keyword, which corresponds to a premade list of organism codes for all KEGG organisms in a given clade. E.g., animals, mammals, bacteria.
+                    """,
+                    #type = argparse.FileType('r'),
+                    metavar = '',
+                    dest = "homologorg")
+
+
 
 
 
@@ -100,6 +124,8 @@ quiet = args.quiet
 verbose = args.verbose
 pubchemarg = args.pubchem
 sdfarg = args.sdf
+homolog = args.homolog
+homologorg = args.homologorg
 
 linebreak = f"\n{'-'*100}\n"
 
@@ -161,7 +187,7 @@ if args.download is not None:
     dir_download = str(args.download)
 else:
     dir_download = "keggchem_downloads"
-dirs = ["KEGG_entries/compounds", "KEGG_entries/orthologues", "KEGG_entries/reactions",
+dirs = ["KEGG_entries/compounds", "KEGG_entries/orthologues", "KEGG_entries/reactions", "KEGG_entries/genes",
         "KEGG_entries/modules", "Structure_files/Downloaded", "Structure_files/nullfiles", "SDFfiles"]
 dir_download = os.path.abspath(dir_download)
 if verbose == True:
@@ -191,14 +217,75 @@ def openfile(x):
                 #if re.search(r"\b([MKTCGRNHD]|RC)\d{5}\b", line):
                     input.append(line)
                 else:
-                    if quiet != False:
+                    if  verbose == True:
                         print(f"Invalid search term: {line}\n")
             else:
                 if re.search(r"\b([MKTCGRNHD]|RC)\d{5}\b", line):
                     input.append(line)
                 else:
-                    if quiet != False:
+                    if verbose == True:
                         print(f"Invalid search term {line}")
+
+#Set up list of organisms that homologs can be retrieved for if the homolog argument is used
+#Organism codes
+orgfolder = os.path.join(syspath, "organisms")
+organisms = {
+    "animals": os.path.join(orgfolder, "Animals.txt"),
+    "plants":os.path.join(orgfolder, "Plants.txt"),
+    "plant":os.path.join(orgfolder, "Plants.txt"),
+    "bacteria":os.path.join(orgfolder, "Bacteria.txt"),
+    "fungi":os.path.join(orgfolder, "Fungi.txt"),
+    "protists":os.path.join(orgfolder, "Protists.txt"),
+    "archaea":os.path.join(orgfolder, "Archaea.txt"),
+    "cyanobacteria":os.path.join(orgfolder, "Cyanobacteria.txt"),
+    "vertebrates":os.path.join(orgfolder, "Vertebrates.txt"),
+    "mammals":os.path.join(orgfolder, "Mammals.txt"),
+    "birds":os.path.join(orgfolder, "Birds.txt"),
+    "fish":os.path.join(orgfolder, "Fish.txt"),
+    "fishes":os.path.join(orgfolder, "Fish.txt"),
+    "reptiles":os.path.join(orgfolder, "Reptiles.txt"),
+    "amphibians":os.path.join(orgfolder, "Amphibians.txt"),
+    "insects":os.path.join(orgfolder, "Insects.txt"),
+    "molluscs":os.path.join(orgfolder, "Molluscs.txt"),
+    "crustaceans":os.path.join(orgfolder, "Crustaceans.txt"),
+    "chelicerates":os.path.join(orgfolder, "Chelicerates.txt"),
+    "green_algae":os.path.join(orgfolder, "Green_algae.txt"),
+    "red_algae":os.path.join(orgfolder, "Red_algae.txt"),
+    "cnidaria":os.path.join(orgfolder, "Cnidaria.txt"),
+    "eudicots":os.path.join(orgfolder, "Eudicots.txt"),
+    "monocots":os.path.join(orgfolder, "Monocots.txt"),
+    "tunicates":os.path.join(orgfolder, "Tunicates.txt"),
+    "ameobozoa": os.path.join(orgfolder, "Amoebozoa.txt"),
+    "alveolates": os.path.join(orgfolder, "Alveolates.txt"),
+    "acidobacteriota": os.path.join(orgfolder, "Acidobacteriota.txt"),
+    "escherichia": os.path.join(orgfolder, "Escherichia.txt")
+}
+homolog_orglist = []
+def open_homologfile(homologfile):
+    with open(homologfile, "r") as file:
+            while (line := file.readline().strip()):
+                homolog_orglist.append(line)
+if homologorg is not None:
+    if os.path.isfile(homologorg) == True:
+        homologfile = homologorg
+        open_homologfile(homologfile)
+    else:
+        if homologorg.lower() in [orgname for orgname in organisms.keys()]:
+            #Search organisms list for organism keyword
+            try:
+                homologfile = organisms[homologorg.lower()]
+            except:
+                raise SystemExit(f"Error: Dictionary key unavailable for keyword {homologorg}")
+            #Open organism file from data directory
+            try:
+                open_homologfile(homologfile)
+            except:
+                raise SystemExit(f"Error: Unable to load organism list {homologorg} from directory {syspath}")
+        else:
+            homologfile = None
+            homolog_orglist.append(homologorg.lower())
+            #raise SystemError(f"Unable to load organism list")
+
 
 
 #Create output directory structure
@@ -240,6 +327,22 @@ def write_pathway_summary(filename):
     pathway_writer.writerows(pathway_data)
 
 
+#----------------------------------------Print Header----------------------------------------#
+if quiet == False:
+    print(f"{linebreak}KEGGChem{linebreak}")
+
+    print("Arguments given:")
+    print(f"Mode: {mode}, Input file: {infile.name}, Output directory: {outdir}, Download directory: {dir_download}",
+        f"Quiet: {quiet}, Verbose: {verbose}, Structure: {structure}",
+        f"Pubchem: {pubchemarg}, SDF: {sdfarg}, Homolog: {homolog}, Homolog organism: {homologorg}",
+        sep="\n")
+    if homologorg is not None:
+        if homologfile is None:
+            print(f"Filtering homolog genes by organism code {homologorg}")
+        else:
+            print(f"Filtering homolog genes by entries in {homologfile}")
+
+
 #----------------------------------------Specific mode functions----------------------------------------#
 
 #--------------------KEGG KO/Module to compound--------------------
@@ -265,7 +368,67 @@ def get_reaction_codes(KO):
     module_codes = [*set(re.findall(r"M\d{5}", r))]
     return reaction_codes, module_codes
 
+#Function to retrieve genes from the list function of the KEGG API using KO codes
+def retrieve_genes_from_ko(KO):
+    url = f"https://rest.kegg.jp/link/genes/{KO}"
+    req = requests.get(url).text
+    req = req.replace(f"ko:{KO}\t", "")
+    gene_dict = {}
+    #Set up counter and length for showing progress 
+    length = len(req.splitlines())
+    genecount = 1
+    
+    #Function to retrieve genes. Functioned so that it can be modified for homologfile command
+    def retrieve_gene(genename):
+        geneurl = f"https://rest.kegg.jp/get/{genename}"
+        genefile = os.path.join(dir_download, "KEGG_entries/genes", genename)
 
+        #Collect gene data
+        def collect_gene_data(gene):
+            AASEQ_pattern = re.compile(r'^AASEQ\s+(\d+)', re.MULTILINE)
+            AASEQ_match = AASEQ_pattern.search(gene)
+            NTSEQ_pattern = re.compile(r'^NTSEQ\s+(\d+)', re.MULTILINE)
+            NTSEQ_match = NTSEQ_pattern.search(gene)
+            NTSEQ_length = int(NTSEQ_match.group(1))
+            AASEQ_length = int(AASEQ_match.group(1))
+            return NTSEQ_length, AASEQ_length
+        
+        if os.path.exists(genefile) == False:
+            gene = requests.get(geneurl).text
+            NTSEQ_length, AASEQ_length = collect_gene_data(gene)
+            with open(genefile, "w") as handle:
+                if verbose == True:
+                    print(f"Writing gene {genename} to file {genefile}")
+                handle.write(gene)
+                gene_dict[genename] = [gene, NTSEQ_length, AASEQ_length] 
+        else:
+            with open(genefile, "r") as handle:
+                gene = handle.read()
+                NTSEQ_length, AASEQ_length = collect_gene_data(gene)
+                if verbose == True:
+                    print(f"Retrieving gene file {genename} from download directory")
+                gene_dict[genename] = [gene, NTSEQ_length, AASEQ_length]
+        if quiet == False:
+            print(f"Retrieved gene {genename} ({genecount}/{length})")
+        
+
+    
+    #Parse lines using the retrieve_gene function
+    for line in req.splitlines():
+        genename = line
+        if homologorg is None:
+            gene_data = retrieve_gene(genename)
+        else: 
+            #Find organism code
+            org = line.split(":", 1)[0]
+            if org in homolog_orglist:
+                gene_data = retrieve_gene(genename)
+            else:
+                if verbose == True:
+                    print(f"{genename} ignored as it was not in the organism list")
+        #retrieve_gene(genename)
+        genecount += 1
+    return gene_dict
 
 
 # Function to retrieve compound/glycan codes associated with a reaction or module code
@@ -514,11 +677,18 @@ def structure_file_download(totallist):
             structurecount += 1
         if quiet == False:
             print(f"{linebreak}Finished downloading compound structure data{linebreak}")
+
+
+
+
 #----------------------------------------Function - Run KO to compound----------------------------------------#
 def ko_to_compound():
     #Create outdir structure
     dir_list = ["Results/Individual_results", "Summaries"]
+    if homolog == True:
+        dir_list.append("Results/Genes")
     create_outdirs(dir_list)
+
     count_current = 1
     dict_reaction_codes = {}
     dict_module_codes = {}
@@ -526,9 +696,11 @@ def ko_to_compound():
     reaction_compounds_list = []
     module_glycan_list = []
     reaction_glycan_list = []
+    homolog_dict = {}
 
-    print(f"{linebreak}Analysing {input_unique_total} unique KEGG orthologues from ",\
-        f"{infile.name} ({input_total} given){linebreak}", sep="")
+    if quiet == False:
+        print(f"{linebreak}Analysing {input_unique_total} unique KEGG orthologues from ",\
+            f"{infile.name} ({input_total} given){linebreak}", sep="")
     
     #Iterate over all orthologues and extract reaction codes and associated compound codes
     for orthologue_id in input_unique:
@@ -577,11 +749,15 @@ def ko_to_compound():
                 #return compound_codes
             extract_code(reaction_codes, total_reactions_list, dict_reaction_codes, all_reaction_results, reaction_compounds_list, reaction_glycan_list)
             extract_code(module_codes, total_compounds_list, dict_module_codes, all_module_results, module_compounds_list, module_glycan_list)
+
         #Print current count in order to show progress
         if quiet == False:
             print(f"\nWrote {orthologue_id} to file ({count_current}/{input_unique_total}){linebreak}")
         count_current += 1
-    
+
+
+
+        
     #Set unique lists of total compounds/glycans, as well as those sourced through modules or reactions
     compounds_unique = sorted([*set(total_compounds_list)])
     glycans_unique = sorted([*set(total_glycans_list)])
@@ -639,11 +815,8 @@ def ko_to_compound():
     #Download structure files
     structure_file_download(compounds_unique)
 
-
-
-    
     #Write out summary text
-    with open(os.path.join(outdir, "run_summary.txt"), "a") as summary,\
+    with open(os.path.join(outdir, "Summaries", "run_summary.txt"), "a") as summary,\
     open(os.path.join(outdir, "Summaries", "compound_summary.txt"), "a") as sum_compounds,\
     open(os.path.join(outdir, "Summaries", "reaction_summary.txt"), "a") as sum_reactions,\
         open(os.path.join(outdir, "Summaries", "glycan_summary.txt"), "w") as sum_glycans:
@@ -692,7 +865,35 @@ def ko_to_compound():
                                 glycan_common_count, total_glycans_dict)
 
 
-    
+    #Homolog extraction
+    if homolog == True:
+        if quiet == False:
+            print(f"{linebreak}Extracting homolog data from orthologues{linebreak}")
+        count_current = 1
+        for orthologue_id in input_unique:
+            if quiet == False:
+                print(f"{linebreak}Retrieving genes for {orthologue_id} ({count_current}/{input_unique_total})")
+            #Make output folder for orthologue
+            gene_out = os.path.join(outdir, "Results/Genes", orthologue_id)
+            os.makedirs(gene_out)
+            try:
+                gene_dict = retrieve_genes_from_ko(orthologue_id)
+                homolog_dict[orthologue_id] = gene_dict
+                #Write gene results to results folder for orthologue
+                if verbose == True:
+                    print(f"\nWriting genes to results folder {gene_out}\n")
+                for genename, generesult in gene_dict.items():
+                    #genefile = genename + ".txt"
+                    with open(os.path.join(gene_out, genename + ".txt"), "w") as handle:
+                        handle.write(generesult[0])
+                
+            except:
+                print(f"Error: Failed to retrieve genes for {orthologue_id}")
+            
+            if quiet == False:
+                print(f"\nRetrieved genes for {orthologue_id} ({count_current}/{input_unique_total})\n")
+            count_current += 1
+        #End homolog extraction step
 
 
 
@@ -700,18 +901,19 @@ def ko_to_compound():
 def module_to_compound():
     count_current = 1
     #Create outdir structure
-    dir_list = ["Results", "Summaries"]
+    dir_list = ["Results/Individual_results", "Summaries"]
     create_outdirs(dir_list)
-
-    print(f"{linebreak}Analysing {input_unique_total} unique KEGG modules from ",\
-        f"{infile.name} ({input_total} given){linebreak}", sep="")
+    
+    if quiet == False:
+        print(f"{linebreak}Analysing {input_unique_total} unique KEGG modules from ",\
+            f"{infile.name} ({input_total} given){linebreak}", sep="")
     
     for module in input_unique:
         print(f"Extracting compounds from KEGG module {module}\n")
         compound_codes = get_compound_codes(module)
         outfile = f"{module}.txt"
 
-        with open(os.path.join(outdir, "Results", outfile),"a") as result,\
+        with open(os.path.join(outdir, "Results/Individual_results", outfile),"a") as result,\
                 open(os.path.join(outdir, "Results", "all_results.txt"), "a") as summary:
                     #Write file header
                     for compound_code in compound_codes:
@@ -757,7 +959,7 @@ def module_to_compound():
                 print(f"{linebreak}Finished downloading compound structure data{linebreak}")
     
     #Write out summary text
-    with open(os.path.join(outdir, "run_summary.txt"), "w") as summary,\
+    with open(os.path.join(outdir, "Summaries", "run_summary.txt"), "w") as summary,\
         open(os.path.join(outdir, "Summaries", "compound_summary.txt"), "w") as sum_compound,\
             open(os.path.join(outdir, "Summaries", "glycan_summary.txt"), "w") as sum_glycan:
         summary.write(f"{linebreak}Overall summary:{linebreak}")
@@ -808,15 +1010,13 @@ def compound_data():
     print(f"{linebreak}Retrieving data for {input_unique_total} unique KEGG compounds from ",\
                     f"{infile.name} ({input_total} given){linebreak}", sep="")
 
-    with open(os.path.join(outdir, "Results", "Formulas.txt"), "a") as formulas,\
-    open(os.path.join(outdir, "Results", "Weights.txt"), "a") as weight,\
-        open(os.path.join(outdir, "Results", "Compound_data.tsv"), "a") as out:
+    with open(os.path.join(outdir, "Results", "Compound_data.tsv"), "a") as out:
         out_csv = []
         out_write = csv.writer(out, delimiter='\t')
         #out.write("Compound;formula;exact mass;molecular weight;ChEBI ID;PubChem SID;pathways\n")
         out_header = ["compound", "formula", "exact mass", "molecular weight", "ChEBI ID", "PubChem SID", "KEGG pathways"]
-        formulas.write("Compound:formula\n")
-        weight.write("compound;exact_mass;mol_weight\n")
+        #formulas.write("Compound:formula\n")
+        #weight.write("compound;exact_mass;mol_weight\n")
         for compound in input_unique:
             compound_formula,exact_mass,mol_weight, ChEBI, PubChem, pathway_map = get_compound_data(compound)
             #Add weight to lists for maths later
@@ -831,17 +1031,17 @@ def compound_data():
                 pathways = ",".join(pathway_map)
             #Write formula result
             if compound_formula != 'NULL':
-                formulas.write(f"{compound}:{compound_formula}\n")
+                #formulas.write(f"{compound}:{compound_formula}\n")
                 compound_names_list.append(compound)
                 if quiet == False:
                     print(f"Data retrieved for {compound}: {compound_formula} ({count_current}/{input_unique_total})\n")
             else:
-                formulas.write(f"{compound}:NULL\n")
+                #formulas.write(f"{compound}:NULL\n")
                 compound_names_null.append(compound)
                 if quiet == False:
                     print(f"Data retrieved for {compound}: NULL ({count_current}/{input_unique_total})\n")
             #Write weight results
-            weight.write(f"{compound};{exact_mass};{mol_weight}\n")
+            #weight.write(f"{compound};{exact_mass};{mol_weight}\n")
             if ChEBI != "NULL":
                 chebi = ';'.join(ChEBI)
                 #chebi = ChEBI
@@ -935,7 +1135,7 @@ def compound_data():
 
     #Write summary
     with open(os.path.join(outdir, "Summaries", "run_summary.txt"), "a") as summary,\
-        open(os.path.join(outdir, "Summaries", "Pathway_summary.tsv"), "a") as path_summary:
+        open(os.path.join(outdir, "Summaries", "pathway_summary.tsv"), "a") as path_summary:
         if verbose == True:
             print(f"\nWriting summaries to {os.path.join(outdir, 'Summaries')}\n")
         summary.write(f"{linebreak}KEGG compound data retrieval summary:{linebreak}")
@@ -1120,6 +1320,7 @@ elif mode == "reaction":
     reaction_data()
 elif mode == 'mdata':
     module_data()
+
 
 print(f"{linebreak}Thank you for using {appname}. More details regarding {appname} can be found at {github}.",
       f"{appname} is neither endorsed by, nor associated with KEGG. Please cite the relevant KEGG literature:",
