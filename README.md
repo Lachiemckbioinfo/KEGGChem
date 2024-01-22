@@ -89,7 +89,7 @@ Gene homolog searches of the KEGG database can be further refined using the homo
 2. Input a file containing a list of organism codes from KEGG. For example: `--homolog-organism organism_list.txt`
 3. Input a keyword corresponding to a major category of organisms, as described by the KEGG organism list. These correspond to major categories of organisms, as well as important subgroups, including prokaryotes, eukaryotes, mammals, birds, bacteria, insects. This is not case sensitive. A list of keywords is below.
 
-**Organism keywords**
+**Organism keywords** (slashes indicate alternate spellings)
 + Animals
 + Plants
 + Bacteria
