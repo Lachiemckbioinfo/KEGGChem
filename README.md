@@ -87,18 +87,18 @@ KEGG genes can be downloaded from KEGG using the homolog argument (`--homolog`) 
 Gene homolog searches of the KEGG database can be further refined using the homolog-organism argument (`--homolog-organism`). There are three ways to use this argument:
 1. Input an organism code from the KEGG database. E.g., hsa, ggo, ptr. The input command would be `--homolog-organism hsa`.
 2. Input a file containing a list of organism codes from KEGG. For example: `--homolog-organism organism_list.txt`
-3. Input a keyword corresponding to a major category of organisms, as described by the KEGG organism list. These correspond to major categories of organisms, as well as important subgroups, including prokaryotes, eukaryotes, mammals, birds, bacteria, insects. This is not case sensitive. A list of keywords is below.
+3. Input a keyword corresponding to a major category of organisms, as described by the KEGG organism list. These correspond to major categories of organisms, as well as important subgroups, including prokaryotes, eukaryotes, mammals, birds, bacteria, insects. These are not case sensitive. A list of keywords is below.
 
 **Organism keywords** (slashes indicate alternate spellings)
-+ Prokaryotes
-+ Eukaryotes
++ Prokaryotes/Prokaryota
++ Eukaryotes/Eukaryota
 + Animals
 + Plants
 + Bacteria
 + Fungi
 + Protists
 + Archaea
-+ Cyanobacteria
++ Cyanobacteria/Cyanobacteriota
 + Vertebrates
 + Mammals
 + Birds
