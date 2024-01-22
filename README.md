@@ -80,6 +80,43 @@ Using the ```--pubchem``` arguement enables KEGGChem to retrieve data from Pubch
 ### SDF
 SDF files can be downloaded from PubChem using the ```--sdf``` argument. This requires the ```--pubchem``` argument, which requires KEGGChem to be on compound mode. SDF files are stored in the SDF subdirectory of the Results directory.
 
+### Homolog
+KEGG genes can be downloaded from KEGG using the homolog argument (`--homolog`) when using KO mode. These are saved in the Genes subdirectory of the Results directory. This can be refined using the **homolog-organism** argument.
+
+### Homolog-organism
+Gene homolog searches of the KEGG database can be further refined using the homolog-organism argument (`--homolog-organism`). There are three ways to use this argument:
+1. Input an organism code from the KEGG database. E.g., hsa, ggo, ptr. The input command would be `--homolog-organism hsa`.
+2. Input a file containing a list of organism codes from KEGG. For example: `--homolog-organism organism_list.txt`
+3. Input a keyword corresponding to a major category of organisms, as described by the KEGG organism list. These correspond to major categories of organisms, as well as important subgroups, including prokaryotes, eukaryotes, mammals, birds, bacteria, insects. This is not case sensitive. A list of keywords is below.
+
+**Organism keywords**
++ Animals
++ Plants
++ Bacteria
++ Fungi
++ Protists
++ Archaea
++ Cyanobacteria
++ Vertebrates
++ Mammals
++ Birds
++ Fish/Fishes
++ Reptiles
++ Amphibians
++ Insects
++ Molluscs/Mollusks
++ Crustaceans
++ Chelicerates
++ Green_algae
++ Red_algae
++ Cnidaria
++ Eudicots
++ Monocots
++ Tunicates
++ Ameobozoa
++ Alveolates
++ Acidobacteriota
++ Escherichia
 
 ## Legal
 KEGGChem is published under a MIT license (details in license.txt). 
