@@ -90,6 +90,8 @@ Gene homolog searches of the KEGG database can be further refined using the homo
 3. Input a keyword corresponding to a major category of organisms, as described by the KEGG organism list. These correspond to major categories of organisms, as well as important subgroups, including prokaryotes, eukaryotes, mammals, birds, bacteria, insects. This is not case sensitive. A list of keywords is below.
 
 **Organism keywords** (slashes indicate alternate spellings)
++ Prokaryotes
++ Eukaryotes
 + Animals
 + Plants
 + Bacteria
