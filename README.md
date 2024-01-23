@@ -51,16 +51,14 @@ The input file command (`-f` or `--file`) is a required option. All three modes 
 KEGGChem has several different modes of function, which determine how it behaves. The modes currently available include: ko, module, compound, and reaction. The modes ko and module are used to retrieve KEGG compound codes, while the modes compound and reaction retrieve additional metadata for those codes.
 
 ### ko
-KO mode retrieves KEGG compound codes using an input of KEGG orthologue (KO) codes. This is done by retrieving the KEGG reaction codes from the KO API page, then retrieving the KEGG compound codes from each linked module and reactionpage.
+KO mode retrieves KEGG compound codes using an input of KEGG orthologue (KO) codes. This is done by retrieving the KEGG reaction codes from the KO API page, then retrieving the KEGG compound codes from each linked module and reaction page.
 
 KO results will be outputted into the supplied output directory containing two subdirectories, titled "Results" and "Summaries". The results directory contains the subdirectory "Individual results", which stores results for individual orthologues, as well as a number of text files. The files "compounds.txt", "glycans.txt", and "reactions.txt" contain all compounds, glycans and reactions retrieved by the program through all methods. Additional results files include results such as "compounds_through_reactions.txt" and "glycans_from_modules", which give resultsing compounds retrieved from KO entries either throught their linked module or reaction entries. Finally, the ko results directory also contains the files "all_module_results.txt" and "all_reaction_results.txt" which contain all the respective compounds retrieved for each method for each KEGG orthologue. The "Summaries" directory will contain a run summary, as well as summaries of the number and frequency of returns for compounds, glycans, and reactions.
 
 ### module
-Module mode retrieves compound codes directly from the KEGG compound pages. Note that the list of compound on module pages may be shorter than the list you will get from retrieving the compound codes from each reaction page associated with said module.
+Module mode retrieves compound codes directly from the KEGG compound pages.  
 
-Running KEGGChem on module mode will output the results
-
-The module mode will output the results into a single summary file and a subdirectory titled "Results". The summary file will summaries the number of modules given and the number of unique compounds retrieved, as well as the total number of times each compound was retrieved. The "Results" subdirectory will contain files for each module showing the compounds retrieved in the format of module: compound, compound, compound, and so on. There will also be a file containing the results for all modules together in a single file called all_results.txt
+The module mode will output the results into a single summary file and a subdirectory titled "Results". The summary file will summaries the number of modules given and the number of unique compounds retrieved, as well as the total number of times each compound was retrieved. The "Results" subdirectory will contain files for each module showing the compounds retrieved in the format of module: compound, compound, compound, and so on. There will also be a file containing the results for all modules together in a single file called all_results.txt. Note that the list of compounds on module pages may be shorter than the list you will get from retrieving the compound codes from each reaction page associated with said module.
 
 ### compound
 Compound mode retrieves data related to KEGG compounds from the KEGG database. This includes the molecular formula, molecular weight, and exact mass. This can be further expanded using the ```--structure``` argument, which downloads .mol and .kcf files as well. This mode also be expanded with PubChemPy integratration using the ```--pubchem``` argument, which searches for SID and CID codes and associated data, as well as the ```--sdf``` command, which downloads sdf files from PubChem.
@@ -98,7 +96,7 @@ Gene homolog searches of the KEGG database can be further refined using the homo
 
 
 ## Legal
-KEGGChem is published under a MIT license (details in license.txt). 
+KEGGChem is published under a MIT license (details in [license.txt](license.txt)). 
 Neither the author nor KEGGChem is not associated with, nor endorsed by the KEGG team in any way. Please abide by the copyright and licensing terms of the KEGG program and associated programs as described by their products. 
 
 
