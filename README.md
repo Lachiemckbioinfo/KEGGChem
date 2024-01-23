@@ -81,7 +81,7 @@ Using the ```--pubchem``` arguement enables KEGGChem to retrieve data from Pubch
 SDF files can be downloaded from PubChem using the ```--sdf``` argument. This requires the ```--pubchem``` argument, which requires KEGGChem to be on compound mode. SDF files are stored in the SDF subdirectory of the Results directory.
 
 ### Homolog
-KEGG genes can be downloaded from KEGG using the homolog argument (`--homolog`) when using KO mode. These are saved in the Genes subdirectory of the Results directory. This can be refined using the **homolog-organism** argument.
+KEGG genes can be downloaded from KEGG using the homolog argument (`--homolog`) when using KO mode. These are saved in the Genes subdirectory of the Results directory. This can be refined using the **[homolog-organism]**(https://github.com/Lachiemckbioinfo/KEGGChem/blob/main/README.md#homolog-organism) argument.
 
 ### Homolog-organism
 Gene homolog searches of the KEGG database can be further refined using the homolog-organism argument (`--homolog-organism`). There are three ways to use this argument:
