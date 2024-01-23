@@ -299,9 +299,7 @@ if homolog == True:
         if os.path.isfile(homologorg) == True:
             homologfile = homologorg
             open_homologfile(homologfile)
-        elif os.path.isdir(homologorg):
-            raise SystemExit(f"Error: --homolog-organism command unable to process {homologorg} as it is a directory. Please select a file or enter a keyword search.")
-        else:
+        elif os.path.isfile(homologorg) == False:
             homologfile = None
             #Search descriptions of organism codes and append organism codes to homolog_orglist
             for orgcode, orgstring in orgdict.items():
@@ -312,6 +310,9 @@ if homolog == True:
             #Raise error and exit if search term found no results
             if len(homolog_orglist) == 0:
                 raise SystemExit(f"Error: No organism codes or descriptions matched the keyword {homologorg}")
+        #No directories. Only files or keywords
+        elif os.path.isdir(homologorg):
+            raise SystemExit(f"Error: --homolog-organism command unable to process {homologorg} as it is a directory. Please select a file or enter a keyword search.")
                 
             
 
