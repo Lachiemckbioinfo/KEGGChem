@@ -299,6 +299,8 @@ if homolog == True:
         if os.path.isfile(homologorg) == True:
             homologfile = homologorg
             open_homologfile(homologfile)
+        elif os.path.isdir(homologorg):
+            raise SystemExit(f"Error: --homolog-organism command unable to process {homologorg} as it is a directory. Please select a file or enter a keyword search.")
         else:
             homologfile = None
             #Search descriptions of organism codes and append organism codes to homolog_orglist
