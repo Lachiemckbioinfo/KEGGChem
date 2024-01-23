@@ -43,6 +43,9 @@ options:
 Thank you for using KEGGChem. More details can be found at https://github.com/Lachiemckbioinfo/KEGGChem. This program is neither endorsed by or affiliated with KEGG. Please cite the relevant KEGG literature when using this program.
 ```
 ## Command Arguments
+### Input
+The input file command (`-f` or `--file`) is a required option. All three modes use a raw text files as input, in the form of a list of KEGG orthologue, compound, or module codes, with one code per line. There is no file extension requirement.
+
 
 ## Mode
 KEGGChem has several different modes of function, which determine how it behaves. The modes currently available include: ko, module, compound, and reaction. The modes ko and module are used to retrieve KEGG compound codes, while the modes compound and reaction retrieve additional metadata for those codes.
@@ -65,16 +68,20 @@ Compound mode retrieves data related to KEGG compounds from the KEGG database. T
 ### reaction
 Reaction mode retrieves data related to KEGG reaction entries, including definitions, molecular equations, listed KO codes, reaction pathways and reaction classes.
 
-## Other Arguments
- 
-### Input
-The input file command (`-f` or `--file`) is a required option. All three modes use a raw text files as input, in the form of a list of KEGG orthologue, compound, or module codes, with one code per line. There is no file extension requirement.
 
+## Other Arguments
 ### Output directory
 The output directory, or out option (`-o` or `--out`) is an optional argument that sets the output directory. When run, KEGGChem will output the results in the given directory, and will create the directory if necessary. If no outdir is specified, KEGGChem will create a directory using the name of the input file plus "_output". 
 
+### Download
+KEGGChem downloads and stores KEGG entries in a download folder, specified with the download argument (`-d`, `--download`). If no argument is specified, a standard download directory entitled 'keggchem_downloads' will be created and used instead. When KEGG entries are searched, if they are present in the download directory, they will be used instead of being downloaded in order to speed up search processes.
+
+### Overwrite
+The overwrite argument (`-w`, `--overwrite`) causes KEGG entries to be downloaded even if they are present in the overwrite folder, and overwrite previous entries in that directory. 
+
 ### Structure
- Compound .mol and .kcf files can be downloaded from the KEGG database using the structure argument (`-s` or `--structure`). These are saved in the KEGG_downloads directory, and local versions will be saved in the results directory. This argument requires KEGGChem to be run on module mode.
+Compound .mol and .kcf files can be downloaded from the KEGG database using the structure argument (`-s` or `--structure`). These are saved in the KEGG_downloads directory, and local versions will be saved in the results directory. This argument requires KEGGChem to be run on module mode.
+
 ### Pubchem
 Using the ```--pubchem``` arguement enables KEGGChem to retrieve data from Pubchem using PubChemPy, including SIDs (substance IDs), CIDs (compound IDs), and SMILES. This argument is required in order to use the ```--sdf``` argument. The SID search will search each compound for SID codes, and each SID for CID codes. CIDs are then searched for molecular formulas, and both canonical and isomeric SMILES. These results are saved in the "pubchem_substances.txt" and "pubchem_compounds.txt" files, respectively.
 
@@ -93,7 +100,6 @@ Gene homolog searches of the KEGG database can be further refined using the homo
 ## Legal
 KEGGChem is published under a MIT license (details in license.txt). 
 Neither the author nor KEGGChem is not associated with, nor endorsed by the KEGG team in any way. Please abide by the copyright and licensing terms of the KEGG program and associated programs as described by their products. 
-
 
 
 ## Author details
