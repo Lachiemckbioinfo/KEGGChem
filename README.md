@@ -96,7 +96,7 @@ Gene homolog searches of the KEGG database can be further refined using the homo
 
 
 ## Legal
-KEGGChem is published under a MIT license (details in [license.txt](license.txt)). 
+KEGGChem is published under a MIT license (details in **[license.txt](LICENSE.txt)**). 
 Neither the author nor KEGGChem is not associated with, nor endorsed by the KEGG team in any way. Please abide by the copyright and licensing terms of the KEGG program and associated programs as described by their products. 
 
 
