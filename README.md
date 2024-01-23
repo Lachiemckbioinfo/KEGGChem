@@ -85,54 +85,9 @@ KEGG genes can be downloaded from KEGG using the homolog argument (`--homolog`) 
 
 ### Homolog-organism
 Gene homolog searches of the KEGG database can be further refined using the homolog-organism argument (`--homolog-organism`). There are three ways to use this argument:
-1. Input an organism code from the KEGG database. E.g., hsa, ggo, ptr. The input command would be `--homolog-organism hsa`.
-2. Input a file containing a list of organism codes from KEGG. For example: `--homolog-organism organism_list.txt`
-3. Input a keyword corresponding to a major category of organisms, as described by the KEGG organism list. These correspond to major categories of organisms, as well as important subgroups, including prokaryotes, eukaryotes, mammals, birds, bacteria, insects. These are not case sensitive. Not all categories are included in this list. A list of keywords is below. If current organisms are required, please check the KEGG API to ensure you have the most most up-to-date data.
+1. Input a file containing a list of organism codes from KEGG. For example: `--homolog-organism organism_list.txt`
+2. Input a keyword or phrase to search the KEGG organisms list. If a KEGG organism code is matched (e.g., hsa), then that organism code will be used. If otherwise the keyword or phrase is found in the descriptive text for any organism codes (e.g., eukaryotes, mammals, bacteria), then all organism codes that match that text will be used to filter KEGG genes. This search is not case sensitive. Example uses: `--homolog-organism hsa`, `--homolog-organism mammals`, `--homolog-organism 'green algae'`
 
-**Organism keywords** (slashes indicate alternate spellings)
-+ Prokaryotes/Prokaryota
-+ Eukaryotes/Eukaryota
-+ Animals
-+ Plants
-+ Bacteria
-+ Fungi
-+ Protists
-+ Archaea
-+ Cyanobacteria/Cyanobacteriota
-+ Vertebrates
-+ Mammals
-+ Birds
-+ Fish/Fishes
-+ Reptiles
-+ Amphibians
-+ Arthropods/Arthropoda
-+ Nematodes
-+ Insects
-+ Molluscs/Mollusks
-+ Crustaceans
-+ Chelicerates
-+ Echinoderms
-+ Green_algae
-+ Red_algae
-+ Stramenopiles
-+ Cnidaria
-+ Eudicots
-+ Monocots
-+ Tunicates
-+ Ameobozoa
-+ Alveolates
-+ Acidobacteriota
-+ Enterobacterales
-+ Escherichia
-+ Basidiomycetes
-+ Ascomycetes
-+ Actinomycetota
-+ Chlamydiota
-+ Alphaproteobacteria
-+ Betaproteobacteria
-+ Gammeproteobacteria/Other_Gammaproteobacteria
-+ Ascomycetes
-+ Basidiomycetes
 
 ## Legal
 KEGGChem is published under a MIT license (details in license.txt). 
