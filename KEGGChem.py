@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-#version 0.9.1
+#version 0.9.2
 
 import requests
 import re
@@ -17,7 +17,6 @@ github = "https://github.com/Lachiemckbioinfo/KEGGChem"
 citation = "XXXXX"
 #KEGGcitation = (f"KEGG citation goes here")
 appname = 'KEGGChem'
-syspath = sys.path[0]
 
 
 
@@ -96,6 +95,11 @@ parser.add_argument("--homolog-organism",
                     metavar = '',
                     dest = "homologorg")
 
+parser.add_argument("-w", "--overwrite",
+                    required = False,
+                    help = "Download and overwrite stored files. Default = False.",
+                    action = "store_true")
+
 
 
 
@@ -126,8 +130,16 @@ pubchemarg = args.pubchem
 sdfarg = args.sdf
 homolog = args.homolog
 homologorg = args.homologorg
+overwrite = args.overwrite
+
 
 linebreak = f"\n{'-'*100}\n"
+keywords = {}
+keywords["overwrite"] = overwrite
+keywords["homolog"] = homolog
+keywords["homologorg"] = homologorg
+keywords["verbose"] = verbose
+
 
 #Set start and finish times with datetime
 starttime = datetime.datetime.now()
@@ -226,76 +238,6 @@ def openfile(x):
                     if verbose == True:
                         print(f"Invalid search term {line}")
 
-#Set up list of organisms that homologs can be retrieved for if the homolog argument is used
-#Organism codes
-orgfolder = os.path.join(syspath, "organisms")
-organisms = {
-    "animals": os.path.join(orgfolder, "Animals.txt"),
-    "plants":os.path.join(orgfolder, "Plants.txt"),
-    "plant":os.path.join(orgfolder, "Plants.txt"),
-    "bacteria":os.path.join(orgfolder, "Bacteria.txt"),
-    "fungi":os.path.join(orgfolder, "Fungi.txt"),
-    "protists":os.path.join(orgfolder, "Protists.txt"),
-    "archaea":os.path.join(orgfolder, "Archaea.txt"),
-    "cyanobacteria":os.path.join(orgfolder, "Cyanobacteria.txt"),
-    "vertebrates":os.path.join(orgfolder, "Vertebrates.txt"),
-    "mammals":os.path.join(orgfolder, "Mammals.txt"),
-    "birds":os.path.join(orgfolder, "Birds.txt"),
-    "fish":os.path.join(orgfolder, "Fish.txt"),
-    "fishes":os.path.join(orgfolder, "Fish.txt"),
-    "reptiles":os.path.join(orgfolder, "Reptiles.txt"),
-    "amphibians":os.path.join(orgfolder, "Amphibians.txt"),
-    "insects":os.path.join(orgfolder, "Insects.txt"),
-    "molluscs":os.path.join(orgfolder, "Molluscs.txt"),
-    "crustaceans":os.path.join(orgfolder, "Crustaceans.txt"),
-    "chelicerates":os.path.join(orgfolder, "Chelicerates.txt"),
-    "green_algae":os.path.join(orgfolder, "Green_algae.txt"),
-    "red_algae":os.path.join(orgfolder, "Red_algae.txt"),
-    "cnidaria":os.path.join(orgfolder, "Cnidaria.txt"),
-    "eudicots":os.path.join(orgfolder, "Eudicots.txt"),
-    "monocots":os.path.join(orgfolder, "Monocots.txt"),
-    "tunicates":os.path.join(orgfolder, "Tunicates.txt"),
-    "ameobozoa": os.path.join(orgfolder, "Amoebozoa.txt"),
-    "alveolates": os.path.join(orgfolder, "Alveolates.txt"),
-    "acidobacteriota": os.path.join(orgfolder, "Acidobacteriota.txt"),
-    "escherichia": os.path.join(orgfolder, "Escherichia.txt")
-}
-homolog_orglist = []
-def open_homologfile(homologfile):
-    with open(homologfile, "r") as file:
-            while (line := file.readline().strip()):
-                homolog_orglist.append(line)
-if homologorg is not None:
-    if os.path.isfile(homologorg) == True:
-        homologfile = homologorg
-        open_homologfile(homologfile)
-    else:
-        if homologorg.lower() in [orgname for orgname in organisms.keys()]:
-            #Search organisms list for organism keyword
-            try:
-                homologfile = organisms[homologorg.lower()]
-            except:
-                raise SystemExit(f"Error: Dictionary key unavailable for keyword {homologorg}")
-            #Open organism file from data directory
-            try:
-                open_homologfile(homologfile)
-            except:
-                raise SystemExit(f"Error: Unable to load organism list {homologorg} from directory {syspath}")
-        else:
-            homologfile = None
-            homolog_orglist.append(homologorg.lower())
-            #raise SystemError(f"Unable to load organism list")
-
-
-
-#Create output directory structure
-def create_outdirs(dir_list):
-    for item in dir_list:
-        path = os.path.join(outdir, item)
-        os.makedirs(path, exist_ok = True)
-    if verbose == True:
-        print(f"Create output directories {dir_list} in {outdir}")
-
 #----------------------------------------Process input----------------------------------------#
 #openfile()
 if mode == "ko":
@@ -314,6 +256,74 @@ total_modules_list = []
 total_compounds_list = []
 total_glycans_list = []
 dict_pathways = {}
+orgdict = {}
+homolog_orglist = []
+#----------------------------------------Process orglist for homolog arguments----------------------------------------#
+def get_orglist():
+    orgfile = os.path.join(dir_download, "KEGG_entries", "organisms.txt")
+    if os.path.exists(orgfile) == False or overwrite == True:
+        #Retrieve the KEGG organisms list from API and save to downloads folder
+        url = "https://rest.kegg.jp/list/organism"
+        if verbose == True:
+            print(f"Downloading KEGG organisms list from {url}")
+        req = requests.get(url).text
+        with open(orgfile, "w") as handle:
+            handle.write(req)
+            if verbose == True:
+                print(f"Wrote KEGG organisms list to {orgfile}")
+            orgdata = req.splitlines()
+    else:
+        #Retrieve the KEGG organisms list from the downloads folder
+        with open(orgfile, "r") as req:
+            if verbose == True:
+                print(f"Reading KEGG organisms list from {orgfile}")
+            orgdata = req.readlines()
+    
+    #Process organism list data
+    for item in orgdata:
+        data = item.split("\t")
+        orgcode = data[1]
+        orgstring = f"{data[0]};{data[2]};{data[3]}"
+        orgdict[orgcode] = orgstring
+
+
+
+def open_homologfile(homologfile):
+    with open(homologfile, "r") as file:
+            while (line := file.readline().strip()):
+                homolog_orglist.append(line)
+                
+if homolog == True:
+    if homologorg is not None:
+        get_orglist()
+        if os.path.isfile(homologorg) == True:
+            homologfile = homologorg
+            open_homologfile(homologfile)
+        else:
+            homologfile = None
+            #Search descriptions of organism codes and append organism codes to homolog_orglist
+            for orgcode, orgstring in orgdict.items():
+                if homologorg.lower() == orgcode:
+                    homolog_orglist.append(orgcode)
+                elif homologorg.lower() in orgstring.lower():
+                    homolog_orglist.append(orgcode)
+            #Raise error and exit if search term found no results
+            if len(homolog_orglist) == 0:
+                raise SystemExit(f"Error: No organism codes or descriptions matched the keyword {homologorg}")
+                
+            
+
+
+
+#Create output directory structure
+def create_outdirs(dir_list):
+    for item in dir_list:
+        path = os.path.join(outdir, item)
+        os.makedirs(path, exist_ok = True)
+    if verbose == True:
+        print(f"Create output directories {dir_list} in {outdir}")
+
+
 
 
 #Pathway summary writer
@@ -327,6 +337,10 @@ def write_pathway_summary(filename):
     pathway_writer.writerows(pathway_data)
 
 
+
+
+
+
 #----------------------------------------Print Header----------------------------------------#
 if quiet == False:
     print(f"{linebreak}KEGGChem{linebreak}")
@@ -338,9 +352,9 @@ if quiet == False:
         sep="\n")
     if homologorg is not None:
         if homologfile is None:
-            print(f"Filtering homolog genes by organism code {homologorg}")
+            print(f"Filtering homolog genes using the keyword {homologorg}")
         else:
-            print(f"Filtering homolog genes by entries in {homologfile}")
+            print(f"Filtering homolog genes by entries in file {homologfile}")
 
 
 #----------------------------------------Specific mode functions----------------------------------------#
@@ -350,7 +364,7 @@ if quiet == False:
 def get_reaction_codes(KO):
     ko_file = os.path.join(dir_download, "KEGG_entries/orthologues", KO)
     #Check if file exists in download folder
-    if os.path.exists(ko_file) == False:
+    if os.path.exists(ko_file) == False or overwrite == True:
         url = f"https://rest.kegg.jp/get/{KO}"
         req = requests.get(url).text
         #Strip everything in req from "GENES" onwards
@@ -434,7 +448,7 @@ def retrieve_genes_from_ko(KO):
 # Function to retrieve compound/glycan codes associated with a reaction or module code
 def get_compound_codes(reaction_code):
     reaction_file = os.path.join(dir_download, "KEGG_entries/reactions", reaction_code)
-    if os.path.exists(reaction_file) == False:
+    if os.path.exists(reaction_file) == False or overwrite == True:
         url = f"http://rest.kegg.jp/get/{reaction_code}"
         req = requests.get(url).text
         #Strip everything in req from "GENES" onwards
@@ -469,7 +483,7 @@ def get_compound_codes(reaction_code):
 #Function to retrieve compound data from compound codes
 def get_compound_data(compound_code):
     compound_file = os.path.join(dir_download, "KEGG_entries/compounds", compound_code)
-    if os.path.exists(compound_file) == False:
+    if os.path.exists(compound_file) == False  or overwrite == True:
         url = f"http://rest.kegg.jp/get/{compound_code}"
         req = requests.get(url).text   
         #r = req.split(separator, 1)[0]
@@ -547,7 +561,7 @@ def get_compound_data(compound_code):
 
 def get_glycan_data(glycan_code):
     compound_file = os.path.join(dir_download, "KEGG_entries/compounds", glycan_code)
-    if os.path.exists(compound_file) == False:
+    if os.path.exists(compound_file) == False or overwrite == True:
         url = f"http://rest.kegg.jp/get/{glycan_code}"
         req = requests.get(url).text   
         #r = req.split(separator, 1)[0]
@@ -578,7 +592,7 @@ def get_glycan_data(glycan_code):
 #Function to retrieve reaction data from reaction codes
 def get_reaction_data(reaction_code):
     reaction_file = os.path.join(dir_download, "KEGG_entries/reactions", reaction_code)
-    if os.path.exists(reaction_file) == False:
+    if os.path.exists(reaction_file) == False or overwrite == True:
         url = f"http://rest.kegg.jp/get/{reaction_code}"
         req = requests.get(url).text
         with open(reaction_file, "w") as file:
@@ -618,7 +632,7 @@ def download_structure_files(compound_code, mode):
     elif mode == "kcf":
         urlcode = "-f+k+"
 
-    if os.path.exists(filedir) == False and os.path.exists(nulldir) == False:
+    if (os.path.exists(filedir) == False and os.path.exists(nulldir) == False) or overwrite == True:
         url = f"https://www.kegg.jp/entry/{urlcode}{compound_code}"
         req = requests.get(url).text
         if len(req) > 0:
@@ -856,7 +870,7 @@ def ko_to_compound():
             for key, value in dict_name.items():
                 filename.write(f"{key}:{value}\n")
         
-        #Write compound/glycan summary results to file
+        #Write compound/glycan summary results to filegene_dict
         write_summaries_to_file("Compound", sum_compounds, compounds_count, module_compounds_unique,
                                 reaction_compounds_unique, compound_module_count, compound_reaction_count,
                                 compound_common_count, total_compounds_dict)
@@ -1271,7 +1285,7 @@ def reaction_data():
 #Function for retrieving module data
 def get_module_data(module_code):
     module_file = os.path.join(dir_download, "KEGG_entries/modules", module_code)
-    if os.path.exists(module_file) == False:
+    if os.path.exists(module_file) == False or overwrite == True:
         url = f"http://rest.kegg.jp/get/{module_code}"
         req = requests.get(url).text
     else:
