@@ -19,7 +19,7 @@ Optional arguments include setting the output directory with `--outdir`, downloa
 Help can be accessed py calling `python KEGGChem.py --help` or `python KEGGChem.py -h`. 
 
 ```
-usage: KEGGChem [-h] -m {ko,module,compound,reaction,mdata} -f  [-o] [-d] [-s] [--pubchem] [--sdf] [--homolog] [--homolog-organism] [--quiet | --verbose]
+usage: KEGGChem [-h] -m {ko,module,compound,reaction,mdata} -f  [-o] [-d] [-s] [--pubchem] [--sdf] [--homolog] [--homolog-organism] [-w] [--quiet | --verbose]
 
 KEGGChem is a simple web scraper of the KEGG API, that extracts information from the KEGG compound database using either KEGG orthologues or modules as input.
 
@@ -36,6 +36,7 @@ options:
   --homolog             Find genes on the KEGG database with the same KO codes. Requires --mode=ko. Default = False
   --homolog-organism    Restrict the genes to be downloaded with the --homolog command. This can be done with one of the following options: -Input a KEGG organism code (e.g., hsa, ggo, ptr). -Input a file containing a list of KEGG
                         organism codes. -Input a search keyword, which corresponds to a premade list of organism codes for all KEGG organisms in a given clade. E.g., animals, mammals, bacteria.
+  -w, --overwrite       Download and overwrite stored files. Default = False.
   --quiet               Run program quietly and reduce data printed to screen. Default = False
   --verbose             Print extra program details to screen. Default = False
 
