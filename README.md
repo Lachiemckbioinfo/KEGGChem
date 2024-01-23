@@ -56,7 +56,7 @@ Module mode retrieves compound codes directly from the KEGG compound pages. Note
 
 Running KEGGChem on module mode will output the results
 
-The module mode will output the results into a single summary file and a subdirectory titled "Results". The summary file will summaries the number of modules given and the number of unique compounds retrieved, as well as the total number of times each compound was retrieved. The "Results" subdirectory will contain files for each module showing the compounds retrieved in the format of <module>: <compound>, <compound>, <compound>, and so on. There will also be a file containing the results for all modules together in a single file called all_results.txt
+The module mode will output the results into a single summary file and a subdirectory titled "Results". The summary file will summaries the number of modules given and the number of unique compounds retrieved, as well as the total number of times each compound was retrieved. The "Results" subdirectory will contain files for each module showing the compounds retrieved in the format of module: compound, compound, compound, and so on. There will also be a file containing the results for all modules together in a single file called all_results.txt
 
 ### compound
 Compound mode retrieves data related to KEGG compounds from the KEGG database. This includes the molecular formula, molecular weight, and exact mass. This can be further expanded using the ```--structure``` argument, which downloads .mol and .kcf files as well. This mode also be expanded with PubChemPy integratration using the ```--pubchem``` argument, which searches for SID and CID codes and associated data, as well as the ```--sdf``` command, which downloads sdf files from PubChem.
