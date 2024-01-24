@@ -12,11 +12,13 @@ import random
 import datetime
 import pubchempy as pcp
 import csv
+import signal
 
 github = "https://github.com/Lachiemckbioinfo/KEGGChem"
 citation = "XXXXX"
 #KEGGcitation = (f"KEGG citation goes here")
 appname = 'KEGGChem'
+version = 'KEGGChem 0.9.2'
 
 
 
@@ -131,14 +133,10 @@ sdfarg = args.sdf
 homolog = args.homolog
 homologorg = args.homologorg
 overwrite = args.overwrite
+download = args.download
 
 
 linebreak = f"\n{'-'*100}\n"
-keywords = {}
-keywords["overwrite"] = overwrite
-keywords["homolog"] = homolog
-keywords["homologorg"] = homologorg
-keywords["verbose"] = verbose
 
 
 #Set start and finish times with datetime
@@ -215,12 +213,15 @@ if mode == "ko" or mode == "module":
  
 
 input = []
+input_invalid = {}
 
 #Extract input codes and appent to input list
 def openfile(x):
     with infile as file:
+        line_number = 0
         while (line := file.readline().strip()):
             line = line.upper()
+            line_number += 1
             if "KO:" in line:
                 line = line.replace("KO:", "")
             #If search == [LETTER] or RC + 5 digits, proceed
@@ -229,12 +230,14 @@ def openfile(x):
                 #if re.search(r"\b([MKTCGRNHD]|RC)\d{5}\b", line):
                     input.append(line)
                 else:
+                    input_invalid[line_number] = line
                     if  verbose == True:
                         print(f"Invalid search term: {line}\n")
             else:
                 if re.search(r"\b([MKTCGRNHD]|RC)\d{5}\b", line):
                     input.append(line)
                 else:
+                    input_invalid[line_number] = line
                     if verbose == True:
                         print(f"Invalid search term {line}")
 
@@ -247,6 +250,8 @@ elif mode == "compound":
 elif mode == "reaction":
     openfile("R")
 elif mode == "module":
+    openfile("M")
+elif mode == "mdata":
     openfile("M")
 input_unique = sorted([*set(input)])
 input_total = len(input)
@@ -347,7 +352,6 @@ def write_pathway_summary(filename):
 #----------------------------------------Print Header----------------------------------------#
 if quiet == False:
     print(f"{linebreak}KEGGChem{linebreak}")
-
     print("Arguments given:")
     print(f"Mode: {mode}, Input file: {infile.name}, Output directory: {outdir}, Download directory: {dir_download}",
         f"Quiet: {quiet}, Verbose: {verbose}, Structure: {structure}",
@@ -358,6 +362,9 @@ if quiet == False:
             print(f"Filtering homolog genes using the keyword {homologorg}")
         else:
             print(f"Filtering homolog genes by entries in file {homologfile}")
+
+
+
 
 
 #----------------------------------------Specific mode functions----------------------------------------#
@@ -449,10 +456,15 @@ def retrieve_genes_from_ko(KO):
 
 
 # Function to retrieve compound/glycan codes associated with a reaction or module code
-def get_compound_codes(reaction_code):
-    reaction_file = os.path.join(dir_download, "KEGG_entries/reactions", reaction_code)
-    if os.path.exists(reaction_file) == False or overwrite == True:
-        url = f"http://rest.kegg.jp/get/{reaction_code}"
+def get_compound_codes(query_code):
+    #Ensure that queries are saved to/loaded from the correct directory
+    if re.search(rf"R\d{{5}}\b", query_code):
+        query_file = os.path.join(dir_download, "KEGG_entries/reactions", query_code)
+    elif re.search(rf"M\d{{5}}\b", query_code):
+        query_file = os.path.join(dir_download, "KEGG_entries/modules", query_code)
+
+    if os.path.exists(query_file) == False or overwrite == True:
+        url = f"http://rest.kegg.jp/get/{query_code}"
         req = requests.get(url).text
         #Strip everything in req from "GENES" onwards
         if mode == "ko":
@@ -462,12 +474,12 @@ def get_compound_codes(reaction_code):
                 r = req.split("COMPOUND", 1)[1]
             else:
                 r = req
-        with open(reaction_file, "w") as file:
+        with open(query_file, "w") as file:
             file.write(req)
         if verbose == True:
-            print(f"Wrote {reaction_code} to file\n")
+            print(f"Wrote {query_code} to file\n")
     else:
-        with open(reaction_file, "r") as file:
+        with open(query_file, "r") as file:
             if mode == "ko":
                 r = file.read().split(separator, 1)[0]
             else:
@@ -477,7 +489,7 @@ def get_compound_codes(reaction_code):
                 else:
                     r = req
         if verbose == True:
-            print(f"Extracted {reaction_code} from file\n")
+            print(f"Extracted {query_code} from file\n")
     #Extract compound codes from page
     compound_codes = [*set(re.findall(r"\b[CG]\d{5}\b", r))]
     return compound_codes
@@ -607,6 +619,18 @@ def get_reaction_data(reaction_code):
             req = file.read()
         if verbose == True:
             print(f"Extracted {reaction_code} from file\n")
+    #Check if data present
+    if len(req) > 0:
+        reaction_result = True
+    else:
+        reaction_result = False
+    #Extract name
+    name_string = re.findall(r"NAME        .*", req)
+    if len(name_string) > 0:
+        r_name = name_string[0].replace("NAME        ", "")
+    else:
+        r_name = "NULL"
+    
     #Extract equation
     equation_string = re.findall(r"EQUATION    .*", req)
     if len(equation_string) > 0:
@@ -622,7 +646,7 @@ def get_reaction_data(reaction_code):
     rclass = [*set(re.findall(r"RC\d{5} .*", req))]
     ko_codes = [*set(re.findall(r"K\d{5}", req))]
     pathways = [*set(re.findall(r"rn\d{5}  .*", req))]
-    return equation, definition, rclass, ko_codes, pathways
+    return reaction_result, r_name, equation, definition, rclass, ko_codes, pathways
 
 
 #---------------------Structure download functions----------------------#
@@ -833,24 +857,11 @@ def ko_to_compound():
     structure_file_download(compounds_unique)
 
     #Write out summary text
-    with open(os.path.join(outdir, "Summaries", "run_summary.txt"), "a") as summary,\
-    open(os.path.join(outdir, "Summaries", "compound_summary.txt"), "a") as sum_compounds,\
+    with open(os.path.join(outdir, "Summaries", "compound_summary.txt"), "a") as sum_compounds,\
     open(os.path.join(outdir, "Summaries", "reaction_summary.txt"), "a") as sum_reactions,\
         open(os.path.join(outdir, "Summaries", "glycan_summary.txt"), "w") as sum_glycans:
         
-        summary.write(f"{linebreak}Overall summary:{linebreak}")
-        filepath = os.path.abspath(outdir)
-        summary.write(f"Input file: {infile.name}\n")
-        summary.write(f"Results saved to {filepath}\n")
-        runtime, timestamp_end = timetaken()
-        summary.write(f"Start time: {timestamp}\n")
-        summary.write(f"End time: {timestamp_end}\n")
-        summary.write(f"Runtime: {runtime}\n")
-        summary.write(f"Total number of orthologues: {input_total}\n")
-        summary.write(f"Total number of unique orthologues: {input_unique_total}\n")
-        summary.write(f"Total unique reactions: {reactions_count}\n")
-        summary.write(f"Total unique compounds: {compounds_count}\n")
-        summary.write(f"Total unique glycans count: {glycans_count}\n")
+
         #Write reaction summary results to file
         sum_reactions.write(f"{linebreak}Reactions summary:{linebreak}")
         sum_reactions.write(f"Total unique reactions: {reactions_count}\n\n")
@@ -911,6 +922,8 @@ def ko_to_compound():
                 print(f"\nRetrieved genes for {orthologue_id} ({count_current}/{input_unique_total})\n")
             count_current += 1
         #End homolog extraction step
+    ko_results = [total_reactions_dict, total_compounds_dict, total_glycans_dict]
+    return ko_results
 
 
 
@@ -976,21 +989,9 @@ def module_to_compound():
                 print(f"{linebreak}Finished downloading compound structure data{linebreak}")
     
     #Write out summary text
-    with open(os.path.join(outdir, "Summaries", "run_summary.txt"), "w") as summary,\
-        open(os.path.join(outdir, "Summaries", "compound_summary.txt"), "w") as sum_compound,\
+    with open(os.path.join(outdir, "Summaries", "compound_summary.txt"), "w") as sum_compound,\
             open(os.path.join(outdir, "Summaries", "glycan_summary.txt"), "w") as sum_glycan:
-        summary.write(f"{linebreak}Overall summary:{linebreak}")
-        filepath = os.path.abspath(outdir)
-        summary.write(f"Input file: {infile.name}\n")
-        summary.write(f"Results saved to {filepath}\n")
-        runtime, timestamp_end = timetaken()
-        summary.write(f"Start time: {timestamp}\n")
-        summary.write(f"End time: {timestamp_end}\n")
-        summary.write(f"Runtime: {runtime}\n")
-        summary.write(f"Total number of modules {input_total}\n")
-        summary.write(f"Total number of unique modules: {input_unique_total}\n")
-        summary.write(f"Total unique compounds: {compounds_count}\n")
-        summary.write(f"Total number of unique glycans {glycans_count}\n")
+
         #Write compound summary results to file
         sum_compound.write(f"{linebreak}Compounds summary:{linebreak}")
         sum_compound.write(f"Total unique compounds: {compounds_count}\n\n")
@@ -1004,6 +1005,8 @@ def module_to_compound():
         for key, value in total_glycans_dict.items():
             sum_glycan.write(f"{key}: {value}\n")
     
+    module_results = [total_compounds_dict, total_glycans_dict]
+    return module_results
     
 
 
@@ -1016,8 +1019,8 @@ def compound_data():
         dir_list.append("Results/SDF")
     create_outdirs(dir_list)
 
-    compound_names_list = []
-    compound_names_null = []
+    compound_formula_list = []
+    compound_formula_null = []
     lst_exact_mass = []
     lst_mol_weight = []
     lst_chebi = []
@@ -1049,12 +1052,12 @@ def compound_data():
             #Write formula result
             if compound_formula != 'NULL':
                 #formulas.write(f"{compound}:{compound_formula}\n")
-                compound_names_list.append(compound)
+                compound_formula_list.append(compound)
                 if quiet == False:
                     print(f"Data retrieved for {compound}: {compound_formula} ({count_current}/{input_unique_total})\n")
             else:
                 #formulas.write(f"{compound}:NULL\n")
-                compound_names_null.append(compound)
+                compound_formula_null.append(compound)
                 if quiet == False:
                     print(f"Data retrieved for {compound}: NULL ({count_current}/{input_unique_total})\n")
             #Write weight results
@@ -1151,44 +1154,10 @@ def compound_data():
     structure_file_download(input_unique)
 
     #Write summary
-    with open(os.path.join(outdir, "Summaries", "run_summary.txt"), "a") as summary,\
-        open(os.path.join(outdir, "Summaries", "pathway_summary.tsv"), "a") as path_summary:
-        if verbose == True:
-            print(f"\nWriting summaries to {os.path.join(outdir, 'Summaries')}\n")
-        summary.write(f"{linebreak}KEGG compound data retrieval summary:{linebreak}")
-        summary.write("\nGeneral information\n")
-        filepath = os.path.abspath(outdir)
-        summary.write(f"Input file: {infile.name}\n")
-        summary.write(f"Results saved to {filepath}\n")
-        runtime, timestamp_end = timetaken()
-        summary.write(f"Start time: {timestamp}\n")
-        summary.write(f"End time: {timestamp_end}\n")
-        summary.write(f"Runtime: {runtime}\n")
-        summary.write(f"Compound codes given: {input_total}\n")
-        summary.write(f"Unique compound codes given: {input_unique_total}\n")
-        summary.write(f"Output directiory: {outdir}\n")
-        summary.write(f"\nCompound formula summary\n")
-        summary.write(f"Compound codes with formulas retrieved: {len(compound_names_list)}\n")
-        summary.write(f"Compound codes without formulas: {len(compound_names_null)}\n\n")
-
-        #Maths!
-        summary.write(f"\nCompound weights summary\n")
-        summary.write(f"Compounds with exact mass: {len(lst_exact_mass)}\n")
-        if len(lst_exact_mass) > 0:
-            summary.write(f"Mean compound exact mass: {stat.mean(lst_exact_mass)}\n")
-            summary.write(f"Median compound exact mass: {stat.median(lst_exact_mass)}\n")
-        else:
-            if quiet != False:
-                print("No compounds detected with exact mass listed")
-        summary.write(f"Compounds with mol. weight: {len(lst_mol_weight)}\n")
-        if len(lst_mol_weight) > 0:
-            summary.write(f"Mean compound mol. weight: {stat.mean(lst_mol_weight)}\n")
-            summary.write(f"Median compound mol.weight: {stat.median(lst_mol_weight)}\n")
-        else:
-            if quiet != False:
-                print("No compounds detected with molecular weight listed")
+    with open(os.path.join(outdir, "Summaries", "pathway_summary.tsv"), "a") as path_summary:
         write_pathway_summary(path_summary)
-        
+    compound_results = [compound_formula_list, compound_formula_null, lst_exact_mass, lst_mol_weight]
+    return compound_results
         
 #----------------------------------------Function - Run reaction data retrieve----------------------------------------
 def reaction_data():
@@ -1199,6 +1168,8 @@ def reaction_data():
 
     reaction_names_list = []
     reaction_names_null = []
+    reaction_result_true = []
+    reaction_result_false = []
     lst_rclass = []
     lst_ko = []
     lst_pathways = []
@@ -1220,7 +1191,19 @@ def reaction_data():
         
         for reaction in input_unique:
             #Write equation results
-            equation, definition, rclasses, ko_codes, pathways = get_reaction_data(reaction)
+            reaction_result, r_name, equation, definition, rclasses, ko_codes, pathways = get_reaction_data(reaction)
+            #Check if any result found
+            if reaction_result == True:
+                reaction_result_true.append(reaction)
+            else:
+                reaction_result_false.append(reaction)
+            
+            #Reaction name
+            if len(r_name) > 0:
+                reaction_names_list.append(reaction)
+            else:
+                reaction_names_null.append(reaction)
+            #Equation
             if len(equation) > 0:
                 f_equation.write(f"{reaction}:{equation}\n")
             else:
@@ -1279,9 +1262,8 @@ def reaction_data():
         summary.write(f"Reaction codes given: {input_total}\n")
         summary.write(f"Unique reaction codes given: {input_unique_total}\n")
         summary.write(f"Output directory: {outdir}\n")
-        summary.write(f"\nReaction formula summary\n")
-        summary.write(f"Reaction codes with data retrieved: {len(reaction_names_list)}\n")
-        summary.write(f"Reaction codes without data retrieved: {len(reaction_names_null)}\n\n")
+    reaction_results_list = [reaction_result_true, reaction_result_false, reaction_names_list, reaction_names_null]
+    return reaction_results_list
 
         
 #------------------------------------------------------------Run module data retrieve---------------------------------------------------------------#
@@ -1291,15 +1273,20 @@ def get_module_data(module_code):
     if os.path.exists(module_file) == False or overwrite == True:
         url = f"http://rest.kegg.jp/get/{module_code}"
         req = requests.get(url).text
+        with open(module_file, "w") as handle:
+            handle.write(req)
     else:
         with open(module_file, "r") as file:
             req = file.read()
-    entry = re.search(r"ENTRY       .*", req)
-    moduletype = entry.group(0).replace("ENTRY       ", "")
-    moduletype = moduletype.replace("            ",":")
-    name = re.search(r"NAME        .*", req)
-    modulename = name.group(0).replace("NAME        ","")
-    print(f"{moduletype}:{modulename}")
+    if len(req) > 0:
+        entry = re.search(r"ENTRY       .*", req)
+        moduletype = entry.group(0).replace("ENTRY       ", "")
+        moduletype = moduletype.replace("            ",":")
+        name = re.search(r"NAME        .*", req)
+        modulename = name.group(0).replace("NAME        ","")
+        print(f"{moduletype}:{modulename}")
+    else:
+        print(f"{module_code}: No data found")
 
 def module_data():
     #count_current = 1
@@ -1322,22 +1309,98 @@ def module_data():
         print("Structure retrieval is not run with KEGG module retrieve")
 
 
- 
+ #----------------------------------------Function to write log----------------------------------------#
+def write_log():
+    #Calculate runtime
+    runtime, timestamp_end = timetaken()
+
+    keywords = {}
+    keywords["arguments"] = args
+    keywords["infile"] = infile.name
+    keywords['mode'] = mode
+    keywords["overwrite"] = overwrite
+    keywords["verbose"] = verbose
+    keywords["filepath"] = os.path.abspath(outdir)
+    keywords["download"] = download
+    keywords["timestamp_start"] = timestamp
+    keywords["runtime"] = runtime
+    keywords["timestamp_end"] = timestamp_end
+    keywords["pubchemarg"] = pubchemarg
+    keywords["sdfarg"] = sdfarg
+    keywords["homolog"] = homolog
+    keywords["homologorg"] = homologorg
+    
+    
+    with open(os.path.join(outdir, "log.txt"), "w") as outlog:
+        outlog.write(f"{linebreak}KEGGChem log{linebreak}")
+        outlog.write(f"Arguments: {sys.argv}\n")
+        outlog.write(f"Start time: {timestamp}\nEnd time: {timestamp_end}\nRun time: {runtime}\n")
+        outlog.write(f"Input file: {os.path.abspath(infile.name)}\nMode: {mode}\nOutput directory: {os.path.abspath(outdir)}\nDownload directory: {os.path.abspath(dir_download)}\n")
+        outlog.write(f"Verbose: {verbose}\nQuiet: {quiet}\nOverwrite: {overwrite}\n\n")
+        outlog.write(f"Total number of valid entries: {input_total}\nTotal number of unique entries: {input_unique_total}\nInvalid entries: {len(input_invalid)}\n")
+
+        #If invalid entries found, write details to log
+        if len(input_invalid) > 0:
+            outlog.write(f"{linebreak}Invalid entries{linebreak}")
+            for key, value in input_invalid.items():
+                outlog.write(f"Line {key}: {value}\n")
+
+        #Write compound mode cummary
+        if mode == "compound":
+            
+            outlog.write(f"{linebreak}Compound results summary{linebreak}")
+            outlog.write(f"Compound codes with formulas retrieved: {len(compound_results[0])}\n")
+            outlog.write(f"Compound codes without formulas: {len(compound_results[1])}\n\n")
+
+            #Maths!
+            outlog.write(f"\nCompound weights summary\n")
+            outlog.write(f"Compounds with exact mass: {len(compound_results[2])}\n")
+            if len(compound_results[2]) > 0:
+                outlog.write(f"Mean compound exact mass: {stat.mean(compound_results[2])}\n")
+                outlog.write(f"Median compound exact mass: {stat.median(compound_results[2])}\n")
+            else:
+                if quiet != False:
+                    outlog.write("No compounds detected with exact mass listed\n")
+            outlog.write(f"\nCompounds with mol. weight: {len(compound_results[3])}\n")
+            if len(compound_results[3]) > 0:
+                outlog.write(f"Mean compound mol. weight: {stat.mean(compound_results[3])}\n")
+                outlog.write(f"Median compound mol.weight: {stat.median(compound_results[3])}\n")
+            else:
+                if quiet != False:
+                    outlog.write("No compounds detected with molecular weight listed\n")
+        #Write KO mode summary
+        elif mode == "ko":
+            outlog.write(f"{linebreak}KO results summary{linebreak}")
+            outlog.write(f"Total unique reactions retrieved: {len(ko_results[0])}\n")
+            outlog.write(f"Total unique compounds retrieved: {len(ko_results[1])}\n")
+            outlog.write(f"Total unique glycans retrieved: {len(ko_results[2])}\n")
+        #Write module mode summary
+        elif mode == "module":
+            outlog.write((f"{linebreak}Module results summary{linebreak}"))
+            outlog.write(f"Total unique compounds retrieved: {len(module_results[0])}\nTotal unique glycans retrieved: {len(module_results[1])}")
+        #Write reaction mode summary
+        elif mode == "reaction":
+            outlog.write((f"{linebreak}Reaction results summary{linebreak}"))
+            outlog.write(f"Reaction codes with data retrieved: {len(reaction_results_list[0])}\nReaction codes without data retrieved: {len(reaction_results_list[1])}\n")
+        elif mode == "mdata":
+            pass
+
 
     
 #------------------------------------------------------------Run program---------------------------------------------------------------#
 
 if mode == "compound":
-    compound_data()
+    compound_results = compound_data()
 elif mode == "ko":
-    ko_to_compound()
+    ko_results = ko_to_compound()
 elif mode == "module":
-    module_to_compound()
+    module_results = module_to_compound()
 elif mode == "reaction":
-    reaction_data()
+    reaction_results_list = reaction_data()
 elif mode == 'mdata':
     module_data()
-
+if mode != "mdata":
+    write_log()
 
 print(f"{linebreak}Thank you for using {appname}. More details regarding {appname} can be found at {github}.",
       f"{appname} is neither endorsed by, nor associated with KEGG. Please cite the relevant KEGG literature:",
