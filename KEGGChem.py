@@ -8,11 +8,12 @@ import os
 from collections import Counter
 import argparse
 import statistics as stat
-import random
 import datetime
 import pubchempy as pcp
 import csv
 import signal
+#import logging
+
 
 github = "https://github.com/Lachiemckbioinfo/KEGGChem"
 citation = "XXXXX"
@@ -186,8 +187,6 @@ def set_outdir():
         outdir = check_outdir(outdir)
     return outdir
 outdir = set_outdir()
-
-            
             
 
         
@@ -198,7 +197,7 @@ if args.download is not None:
 else:
     dir_download = "keggchem_downloads"
 dirs = ["KEGG_entries/compounds", "KEGG_entries/orthologues", "KEGG_entries/reactions", "KEGG_entries/genes",
-        "KEGG_entries/modules", "Structure_files/Downloaded", "Structure_files/nullfiles", "SDFfiles"]
+        "KEGG_entries/modules", "Structure_files/Downloaded", "Structure_files/nullfiles", "SDFfiles", "KEGG_links/genes"]
 dir_download = os.path.abspath(dir_download)
 if verbose == True:
         print(f"{linebreak}Checking if download subdirectories exist{linebreak}")
@@ -253,6 +252,8 @@ elif mode == "module":
     openfile("M")
 elif mode == "mdata":
     openfile("M")
+elif mode == "homolog":
+    openfile("K")
 input_unique = sorted([*set(input)])
 input_total = len(input)
 input_unique_total =len(input_unique)
@@ -306,12 +307,15 @@ if homolog == True:
             open_homologfile(homologfile)
         elif os.path.isfile(homologorg) == False:
             homologfile = None
+            homologorg_list = homologorg.split(",")
+
             #Search descriptions of organism codes and append organism codes to homolog_orglist
-            for orgcode, orgstring in orgdict.items():
-                if homologorg.lower() == orgcode:
-                    homolog_orglist.append(orgcode)
-                elif homologorg.lower() in orgstring.lower():
-                    homolog_orglist.append(orgcode)
+            for homologorgitem in homologorg_list:
+                for orgcode, orgstring in orgdict.items():
+                    if homologorgitem.lower() == orgcode:
+                        homolog_orglist.append(orgcode)
+                    elif homologorgitem.lower() in orgstring.lower():
+                        homolog_orglist.append(orgcode)
             #Raise error and exit if search term found no results
             if len(homolog_orglist) == 0:
                 raise SystemExit(f"Error: No organism codes or descriptions matched the keyword {homologorg}")
@@ -330,6 +334,7 @@ def create_outdirs(dir_list):
         os.makedirs(path, exist_ok = True)
     if verbose == True:
         print(f"Create output directories {dir_list} in {outdir}")
+    
 
 
 
@@ -362,6 +367,7 @@ if quiet == False:
             print(f"Filtering homolog genes using the keyword {homologorg}")
         else:
             print(f"Filtering homolog genes by entries in file {homologfile}")
+    
 
 
 
@@ -395,7 +401,22 @@ def get_reaction_codes(KO):
 #Function to retrieve genes from the list function of the KEGG API using KO codes
 def retrieve_genes_from_ko(KO):
     url = f"https://rest.kegg.jp/link/genes/{KO}"
-    req = requests.get(url).text
+    linktext = os.path.join(dir_download, "KEGG_links/genes", KO)
+    try:
+        if os.path.exists(linktext) == False or overwrite == True:
+            req = requests.get(url).text
+            with open(linktext, "w") as filehandle:
+                filehandle.write(req)
+                if quiet == False:
+                    print(f"Writing KO and gene links to file {linktext}")
+        else:
+            with open(linktext, "r") as filehandle:
+                req = filehandle.read()
+                if quiet == False:
+                    print(f"Reading KO and gene links from file {linktext}")
+    except:
+        print("Error: File handling in recording KO-Gene links.")
+        
     req = req.replace(f"ko:{KO}\t", "")
     gene_dict = {}
     #Set up counter and length for showing progress 
@@ -434,25 +455,68 @@ def retrieve_genes_from_ko(KO):
                 gene_dict[genename] = [gene, NTSEQ_length, AASEQ_length]
         if quiet == False:
             print(f"Retrieved gene {genename} ({genecount}/{length})")
-        
-
     
     #Parse lines using the retrieve_gene function
+    genenames = []
     for line in req.splitlines():
         genename = line
         if homologorg is None:
-            gene_data = retrieve_gene(genename)
+            retrieve_gene(genename)
+            genenames.append(genename)
         else: 
             #Find organism code
             org = line.split(":", 1)[0]
             if org in homolog_orglist:
-                gene_data = retrieve_gene(genename)
+                retrieve_gene(genename)
+                genenames.append(line)
             else:
                 if verbose == True:
                     print(f"{genename} ignored as it was not in the organism list")
         #retrieve_gene(genename)
         genecount += 1
-    return gene_dict
+    return gene_dict, genenames
+
+
+#Homolog extraction
+def extract_homolog(homolog_dict):
+    if quiet == False:
+        print(f"{linebreak}Extracting homolog data from orthologues{linebreak}")
+    count_current = 1
+    ko_genecount = {}
+    for orthologue_id in input_unique:
+        if quiet == False:
+            print(f"{linebreak}Retrieving genes for {orthologue_id} ({count_current}/{input_unique_total})")
+        
+        gene_out = os.path.join(outdir, "Results/Genes", orthologue_id)
+        
+        
+        try:
+            gene_dict, genenames = retrieve_genes_from_ko(orthologue_id)
+            ko_genecount[orthologue_id] = genenames
+            homolog_dict[orthologue_id] = gene_dict
+            if len(gene_dict) > 0:
+                #Make output folder for orthologue
+                os.makedirs(gene_out)
+                #Write gene results to results folder for orthologue
+                if verbose == True:
+                    print(f"\nWriting genes to results folder {gene_out}\n")
+                for genename, generesult in gene_dict.items():
+                    #genefile = genename + ".txt"
+                    with open(os.path.join(gene_out, genename + ".txt"), "w") as handle:
+                        handle.write(generesult[0])
+            else:
+                with open(os.path.join(outdir, "Results/Genes", "KOs_without_genes.txt"), "a") as filehandle:
+                    filehandle.write(f"{orthologue_id}\n")
+            
+        except:
+            print(f"Error: Failed to retrieve genes for {orthologue_id}\n")
+        
+        if quiet == False:
+            print(f"\nRetrieved genes for {orthologue_id} ({count_current}/{input_unique_total})\n")
+        count_current += 1
+        #End homolog extraction step
+    return ko_genecount
+
 
 
 # Function to retrieve compound/glycan codes associated with a reaction or module code
@@ -719,6 +783,11 @@ def structure_file_download(totallist):
         if quiet == False:
             print(f"{linebreak}Finished downloading compound structure data{linebreak}")
 
+#----------------------------------------Function - Retrieve homologs from KO----------------------------------------#
+def ko_to_homolog():
+    #Create outdir structure
+    dir_list = ["Results/Genes"]
+    create_outdirs(dir_list)
 
 
 
@@ -892,37 +961,32 @@ def ko_to_compound():
                                 reaction_glycans_unique, glycan_module_count, glycan_reaction_count, 
                                 glycan_common_count, total_glycans_dict)
 
-
-    #Homolog extraction
-    if homolog == True:
-        if quiet == False:
-            print(f"{linebreak}Extracting homolog data from orthologues{linebreak}")
-        count_current = 1
-        for orthologue_id in input_unique:
-            if quiet == False:
-                print(f"{linebreak}Retrieving genes for {orthologue_id} ({count_current}/{input_unique_total})")
-            #Make output folder for orthologue
-            gene_out = os.path.join(outdir, "Results/Genes", orthologue_id)
-            os.makedirs(gene_out)
-            try:
-                gene_dict = retrieve_genes_from_ko(orthologue_id)
-                homolog_dict[orthologue_id] = gene_dict
-                #Write gene results to results folder for orthologue
-                if verbose == True:
-                    print(f"\nWriting genes to results folder {gene_out}\n")
-                for genename, generesult in gene_dict.items():
-                    #genefile = genename + ".txt"
-                    with open(os.path.join(gene_out, genename + ".txt"), "w") as handle:
-                        handle.write(generesult[0])
-                
-            except:
-                print(f"Error: Failed to retrieve genes for {orthologue_id}")
-            
-            if quiet == False:
-                print(f"\nRetrieved genes for {orthologue_id} ({count_current}/{input_unique_total})\n")
-            count_current += 1
-        #End homolog extraction step
+    #Append summarise results dictionaries into list
     ko_results = [total_reactions_dict, total_compounds_dict, total_glycans_dict]
+    #Extract homologs for each gene
+    if homolog == True:
+        ko_genelist = extract_homolog(homolog_dict)
+        
+        #Do some stats on the genes returned
+        ko_genes = []
+        for geneitem in ko_genelist.values():
+            for gene in geneitem:
+                ko_genes.append(gene)
+        total_genes_dict = dict(Counter(ko_genes))
+        #Append ko_genelist to ko_results so that it can be displayed in the log
+        ko_results.append(total_genes_dict)
+
+        with open(os.path.join(outdir, "Summaries/homolog_summary.txt"), "w") as handle:
+            handle.write(f"{linebreak}Homolog gene summary{linebreak}")
+            handle.write(f"KO\tGenes returned{linebreak}")
+            for key, value in ko_genelist.items():
+                handle.write(f"{key}\t{len(value)}\n")
+            handle.write(f"{linebreak}Gene\tCount\n")
+            for key, value in total_genes_dict.items():
+                handle.write(f"{key}\t{value}\n")
+
+
+    #Return results list for log summary
     return ko_results
 
 
@@ -995,15 +1059,15 @@ def module_to_compound():
         #Write compound summary results to file
         sum_compound.write(f"{linebreak}Compounds summary:{linebreak}")
         sum_compound.write(f"Total unique compounds: {compounds_count}\n\n")
-        sum_compound.write("Compound: count\n")
+        sum_compound.write("Compound\tcount\n")
         for key, value in total_compounds_dict.items():
-            sum_compound.write(f"{key}: {value}\n")
+            sum_compound.write(f"{key}\t{value}\n")
         #Write gycan summary results to file
         sum_glycan.write(f"{linebreak}Glycan summary:{linebreak}")
         sum_glycan.write(f"Total unique glycans: {glycans_count}\n\n")
-        sum_glycan.write("Glycan: count\n")
+        sum_glycan.write("Glycan\tcount\n")
         for key, value in total_glycans_dict.items():
-            sum_glycan.write(f"{key}: {value}\n")
+            sum_glycan.write(f"{key}\t{value}\n")
     
     module_results = [total_compounds_dict, total_glycans_dict]
     return module_results
@@ -1104,7 +1168,7 @@ def compound_data():
             print(f"{linebreak}Retrieving PubChem SID data from PubChem Substance database{linebreak}")
             if verbose == True:
                 print(f"Opened PubChem substance results file at {SIDout}")
-            SIDout.write("SID;SID source ID;CID\n")
+            SIDout.write("SID\tSID source ID\tCID\n")
             for sid in lst_pubchemsid_unique:
                 try:
                     if sid in dict_SID:
@@ -1120,7 +1184,7 @@ def compound_data():
                         lst_CID.append(sid_CID)
                     if quiet == False:
                         print(f"Retrieved substance data for SID: {sid} from PubChem Substance database ({sidcount}/{sidcount_total})")
-                    SIDout.write(f"{sid};{sid_source_id};{sid_CID}\n")
+                    SIDout.write(f"{sid}\t{sid_source_id}\t{sid_CID}\n")
                     sidcount += 1
                 except:
                     print(f"Invalid SID code searched: {sid}")
@@ -1128,7 +1192,7 @@ def compound_data():
             print(f"{linebreak}Retrieving PubChem CID data from PubChem Compound database{linebreak}")
             if verbose == True:
                 print(f"Opened PubChem Compound results file at {CIDout}")
-            CIDout.write("CID;Molecular formula;Canonical SMILES;Isomeric SMILES\n")
+            CIDout.write("CID\tMolecular formula\tCanonical SMILES\tIsomeric SMILES\n")
             lst_CID_unique = sorted([*set(lst_CID)])
             cidcount = 1
             cidcounttotal = len(lst_CID_unique)
@@ -1142,7 +1206,7 @@ def compound_data():
                     cid_formula = cid_data.molecular_formula
                     cid_canon_SMILES = cid_data.canonical_smiles
                     cid_isomeric_SMILES = cid_data.isomeric_smiles
-                    CIDout.write(f"{cid};{cid_formula};{cid_canon_SMILES};{cid_isomeric_SMILES}\n")
+                    CIDout.write(f"{cid}\t{cid_formula}\t{cid_canon_SMILES}\t{cid_isomeric_SMILES}\n")
                     if quiet == False:
                         print(f"Retrieved compound data for CID: {cid} from PubChem Compound database ({cidcount}/{cidcounttotal})")
                     cidcount += 1
@@ -1183,11 +1247,11 @@ def reaction_data():
             open(os.path.join(outdir, "Results", "Rclass.txt"), "w") as f_rclass,\
                 open(os.path.join(outdir, "Results", "KO_codes.txt"), "w") as f_ko,\
                     open(os.path.join(outdir, "Results", "Pathways.txt"), "w") as f_pathway:
-        f_equation.write("Reaction:equation\n")
-        f_definition.write("Reaction:definition\n")
-        f_rclass.write("Reaction:reaction classes\n")
-        f_ko.write("Reaction:KO codes\n")
-        f_pathway.write("Reaction:Pathways\n")
+        f_equation.write("Reaction\tequation\n")
+        f_definition.write("Reaction\tdefinition\n")
+        f_rclass.write("Reaction\treaction classes\n")
+        f_ko.write("Reaction\tKO codes\n")
+        f_pathway.write("Reaction\tPathways\n")
         
         for reaction in input_unique:
             #Write equation results
@@ -1205,38 +1269,38 @@ def reaction_data():
                 reaction_names_null.append(reaction)
             #Equation
             if len(equation) > 0:
-                f_equation.write(f"{reaction}:{equation}\n")
+                f_equation.write(f"{reaction}\t{equation}\n")
             else:
-                f_equation.write(f"{reaction}:NULL\n")
+                f_equation.write(f"{reaction}\tNULL\n")
             #Write definition results
             if len(definition) > 0:
-                f_definition.write(f"{reaction}:{definition}\n")
+                f_definition.write(f"{reaction}\t{definition}\n")
             else:
-                f_definition.write(f"{reaction}:NULL\n")
+                f_definition.write(f"{reaction}\tNULL\n")
             #Write RCLASS results
             if len(rclasses) > 0:
                 for rclass in rclasses:
                     lst_rclass.append(rclass)
-                f_rclass.write(f"{reaction}:{', '.join(rclasses)}\n")
+                f_rclass.write(f"{reaction}\t{', '.join(rclasses)}\n")
             else:
-                f_rclass.write(f"{reaction}:NULL\n")
+                f_rclass.write(f"{reaction}\tNULL\n")
             #Write KO codes
             if len(ko_codes) > 0:
                 for ko_code in ko_codes:
                     lst_ko.append(ko_code)
-                f_ko.write(f"{reaction}:{','.join(ko_codes)}\n")
+                f_ko.write(f"{reaction}\t{','.join(ko_codes)}\n")
             else:
-                f_ko.write(f"{reaction}:NULL\n")
+                f_ko.write(f"{reaction}\tNULL\n")
             #Write pathways
             if len(pathways) > 0:
                 pathway_codes = [re.sub("  .*", "", item) for item in pathways]
                 for pathway_code in pathway_codes:
                     lst_pathway_codes.append(pathway_code)
-                f_pathway.write(f"{reaction}:{','.join(pathway_codes)}\n")
+                f_pathway.write(f"{reaction}\t{','.join(pathway_codes)}\n")
                 for pathway in pathways:
                     lst_pathways.append(pathway)
             else:
-                f_pathway.write(f"{reaction}:NULL\n")
+                f_pathway.write(f"{reaction}\tNULL\n")
                 
             if quiet == False:
                 print(f"Data retrieved for {reaction}: ({count_current}/{input_unique_total})\n")
@@ -1246,22 +1310,6 @@ def reaction_data():
     #Download structure files
     if structure == True:
         print("Structure retrieval is not run with KEGG reaction retrieve")
-
-    #Write summary
-    with open(os.path.join(outdir, "Summaries", "run_summary.txt"), "a") as summary:
-        summary.write(f"{linebreak}KEGG reaction data retrieval summary:{linebreak}")
-        summary.write("\nGeneral information\n")
-        filepath = os.path.abspath(outdir)
-        summary.write(f"Input file: {infile.name}\n")
-        summary.write(f"Results saved to {filepath}\n")
-        summary.write(f"File input: {infile.name}\n")
-        runtime, timestamp_end = timetaken()
-        summary.write(f"Start time: {timestamp}\n")
-        summary.write(f"End time: {timestamp_end}\n")
-        summary.write(f"Runtime: {runtime}\n")
-        summary.write(f"Reaction codes given: {input_total}\n")
-        summary.write(f"Unique reaction codes given: {input_unique_total}\n")
-        summary.write(f"Output directory: {outdir}\n")
     reaction_results_list = [reaction_result_true, reaction_result_false, reaction_names_list, reaction_names_null]
     return reaction_results_list
 
@@ -1331,7 +1379,7 @@ def write_log():
     keywords["homologorg"] = homologorg
     
     
-    with open(os.path.join(outdir, "log.txt"), "w") as outlog:
+    with open(os.path.join(outdir, "run_summary.txt"), "w") as outlog:
         outlog.write(f"{linebreak}KEGGChem log{linebreak}")
         outlog.write(f"Arguments: {sys.argv}\n")
         outlog.write(f"Start time: {timestamp}\nEnd time: {timestamp_end}\nRun time: {runtime}\n")
@@ -1374,6 +1422,12 @@ def write_log():
             outlog.write(f"Total unique reactions retrieved: {len(ko_results[0])}\n")
             outlog.write(f"Total unique compounds retrieved: {len(ko_results[1])}\n")
             outlog.write(f"Total unique glycans retrieved: {len(ko_results[2])}\n")
+            if homolog == True:
+                outlog.write(f"Total unique genes retrieved: {len(ko_results[3])}")
+                #outlog.write(f"{linebreak}KO Gene retrieval{linebreak}")
+                #outlog.write(f"KO: Genes retrieved\n")
+                #for key, value in ko_results[3].items():
+                #    outlog.write(f"{key}: {len(value)}\n")
         #Write module mode summary
         elif mode == "module":
             outlog.write((f"{linebreak}Module results summary{linebreak}"))
@@ -1406,7 +1460,7 @@ print(f"{linebreak}Thank you for using {appname}. More details regarding {appnam
       f"{appname} is neither endorsed by, nor associated with KEGG. Please cite the relevant KEGG literature:",
       "Kanehisa, M. and Goto, S.; KEGG: Kyoto Encyclopedia of Genes and Genomes. Nucleic Acids Res. 28, 27-30 (2000). https://doi.org/10.1093/nar/28.1.27",
       "Kanehisa, M; Toward understanding the origin and evolution of cellular organisms. Protein Sci. 28, 1947-1951 (2019). https://doi.org/10.1002/pro.3715",
-      f"Kanehisa, M., Furumichi, M., Sato, Y., Kawashima, M. and Ishiguro-Watanabe, M.; KEGG for taxonomy-based analysis of pathways and genomes. Nucleic Acids Res. 51, D587-D592 (2023). https://doi.org/10.1093/nar/gkac963",
+      "Kanehisa, M., Furumichi, M., Sato, Y., Kawashima, M. and Ishiguro-Watanabe, M.; KEGG for taxonomy-based analysis of pathways and genomes. Nucleic Acids Res. 51, D587-D592 (2023). https://doi.org/10.1093/nar/gkac963",
       sep="\n")
 if pubchemarg == True:
     print(f"\nThis program can retrieve a subset of data from the PubChem database using PUG-REST via the PubChemPy library. Please cite the relevanet PubChem literature if publishing.",
