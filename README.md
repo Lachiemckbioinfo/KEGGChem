@@ -92,7 +92,7 @@ KEGG genes can be downloaded from KEGG using the homolog argument (`--homolog`) 
 ### Homolog-organism
 Gene homolog searches of the KEGG database can be further refined using the homolog-organism argument (`--homolog-organism`). There are three ways to use this argument:
 1. Input a file containing a list of organism codes from KEGG. For example: `--homolog-organism organism_list.txt`
-2. Input a keyword or phrase to search the KEGG organisms list. If a KEGG organism code is matched (e.g., hsa), then that organism code will be used. If otherwise the keyword or phrase is found in the descriptive text for any organism codes (e.g., eukaryotes, mammals, bacteria), then all organism codes that match that text will be used to filter KEGG genes. This search is not case sensitive. Example uses: `--homolog-organism hsa`, `--homolog-organism mammals`, `--homolog-organism 'green algae'`
+2. Input a keyword or phrase to search the KEGG organisms list. If a KEGG organism code is matched (e.g., hsa), then that organism code will be used. If otherwise the keyword or phrase is found in the descriptive text for any organism codes (e.g., eukaryotes, mammals, bacteria), then all organism codes that match that text will be used to filter KEGG genes. This search is not case sensitive. Multiple input terms can be used by separating terms with a comma. If using multiple terms, or terms with spaces, encapsulate your search in quotation marks. Example uses: `--homolog-organism hsa`, `--homolog-organism mammals`, `--homolog-organism 'green algae'`, `--homolog-organism 'birds,fishes'`
 
 
 ## Legal
