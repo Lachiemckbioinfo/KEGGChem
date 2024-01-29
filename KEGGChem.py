@@ -308,6 +308,8 @@ if homolog == True:
         elif os.path.isfile(homologorg) == False:
             homologfile = None
             homologorg_list = homologorg.split(",")
+            #Strip whitespace
+            homologorg_list = [homologitem.strip() for homologitem in homologorg_list]
 
             #Search descriptions of organism codes and append organism codes to homolog_orglist
             for homologorgitem in homologorg_list:
