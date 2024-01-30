@@ -19,7 +19,7 @@ Optional arguments include setting the output directory with `--outdir`, downloa
 Help can be accessed py calling `python KEGGChem.py --help` or `python KEGGChem.py -h`. 
 
 ```
-usage: KEGGChem [-h] -m {ko,module,compound,reaction,mdata} -f  [-o] [-d] [-s] [--pubchem] [--sdf] [--homolog] [--homolog-organism] [-w] [--quiet | --verbose]
+usage: KEGGChem [-h] -m {ko,module,compound,reaction,mdata} -i  [-o] [-d] [-s] [--pubchem] [--sdf] [--homolog] [--homolog-organism] [-w] [--quiet | --verbose]
 
 KEGGChem is a simple web scraper of the KEGG API, that extracts information from the KEGG compound database using either KEGG orthologues or modules as input.
 
@@ -27,7 +27,7 @@ options:
   -h, --help            show this help message and exit
   -m {ko,module,compound,reaction,mdata}, --mode {ko,module,compound,reaction,mdata}
                         The mode to run KEGGChem in. Select either 'ko' or 'module' to search for compounds using either ko or module codes as input. Use 'compound' or 'reaction' mode to download related data from listed data entries.
-  -f , --file           The input file
+  -i , --input          The search input. Either select a file, or input a searchterm or KEGG entry code.
   -o , --out            The output directory to be used. If this argument is not used, then a default directory will be created using the input filename + '_output'.
   -d , --download       Download directory. If none is given, a new one will be made if not present already. Default = KEGGChem_downloads
   -s, --structure       Download structural data for compounds, such as weight and mass, and .mol and .kcf files. Default = False
@@ -44,7 +44,8 @@ Thank you for using KEGGChem. More details can be found at https://github.com/La
 ```
 ## Command Arguments
 ### Input
-The input file command (`-f` or `--file`) is a required option. All three modes use a raw text files as input, in the form of a list of KEGG orthologue, compound, or module codes, with one code per line. There is no file extension requirement.
+The input command (`-i` or `--input`) is a required option. Input can either be a file, or a search term (or terms). Input files are raw text files, in the form of a list of KEGG orthologue, compound, module, or reaction codes, with one code per line. Search terms can be used to query KEGG API lists for KEGG entries, with the relevant list searched depending on which mode is used (i.e., the ko list in ko mode, or the module list in module mode).
+
 
 
 ### Mode
