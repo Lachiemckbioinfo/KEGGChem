@@ -11,9 +11,9 @@ KEGGChem requires the following Python libraries:
 
 
 ## How to use:
-KEGGChem is accessed by running the Python script using two required arguments, mode and input file. 
-`python KEGGChem.py --mode <mode> --file <input_file>`
-Optional arguments include setting the output directory with `--outdir`, downloading compound structural data `--structure`, or changing the downloads directory `--download`.
+KEGGChem is accessed by running the Python script using two required arguments, mode and either an input file or search term. 
+`python KEGGChem.py --mode <mode> --input <input_file/search term>`
+Optional arguments include setting the output directory with `--out`, changing the downloads directory `--download`, or overwriting existing downloaded files with `--overwrite`.
  
 
 Help can be accessed py calling `python KEGGChem.py --help` or `python KEGGChem.py -h`. 
