@@ -40,10 +40,10 @@ parser.add_argument("-m", "--mode",
                     """)
                     
 
-parser.add_argument("-f", "--file",
+parser.add_argument("-i", "--input",
                     required = True,
-                    help = "The input file",
-                    type = argparse.FileType('r'),
+                    help = "The search input. Either select a file, or input a searchterm or KEGG entry code.",
+                    #type = argparse.FileType('r'),
                     #Blank metavar argument to make help output read a bit better
                     metavar='',
                     dest = 'infile')
@@ -183,7 +183,7 @@ def set_outdir():
             outdir = check_outdir(outdir_internal)
             #raise SystemError("Error: Result directory already exists")
     else:
-        outdir = str(infile.name + "_output")
+        outdir = str(infile + "_output")
         outdir = check_outdir(outdir)
     return outdir
 outdir = set_outdir()
@@ -196,7 +196,7 @@ if args.download is not None:
     dir_download = str(args.download)
 else:
     dir_download = "keggchem_downloads"
-dirs = ["KEGG_entries/compounds", "KEGG_entries/orthologues", "KEGG_entries/reactions", "KEGG_entries/genes",
+dirs = ["KEGG_entries/compounds", "KEGG_entries/orthologues", "KEGG_entries/reactions", "KEGG_entries/genes", "KEGG_lists",
         "KEGG_entries/modules", "Structure_files/Downloaded", "Structure_files/nullfiles", "SDFfiles", "KEGG_links/genes"]
 dir_download = os.path.abspath(dir_download)
 if verbose == True:
@@ -216,44 +216,97 @@ input_invalid = {}
 
 #Extract input codes and appent to input list
 def openfile(x):
-    with infile as file:
-        line_number = 0
-        while (line := file.readline().strip()):
-            line = line.upper()
-            line_number += 1
-            if "KO:" in line:
-                line = line.replace("KO:", "")
-            #If search == [LETTER] or RC + 5 digits, proceed
-            if mode != "download":
-                if re.search(rf"{x}\d{{5}}\b", line):
-                #if re.search(r"\b([MKTCGRNHD]|RC)\d{5}\b", line):
-                    input.append(line)
+    if os.path.exists(infile) == True:
+        with open(infile, "r") as file:
+            line_number = 0
+            while (line := file.readline().strip()):
+                line = line.upper()
+                line_number += 1
+                if "KO:" in line:
+                    line = line.replace("KO:", "")
+                #If search == [LETTER] or RC + 5 digits, proceed
+                if mode != "download":
+                    if re.search(rf"{x}\d{{5}}\b", line):
+                    #if re.search(r"\b([MKTCGRNHD]|RC)\d{5}\b", line):
+                        input.append(line)
+                    else:
+                        input_invalid[line_number] = line
+                        if  verbose == True:
+                            print(f"Invalid search term: {line}\n")
                 else:
-                    input_invalid[line_number] = line
-                    if  verbose == True:
-                        print(f"Invalid search term: {line}\n")
+                    if re.search(r"\b([MKTCGRNHD]|RC)\d{5}\b", line):
+                        input.append(line)
+                    else:
+                        input_invalid[line_number] = line
+                        if verbose == True:
+                            print(f"Invalid search term {line}")
+        input_mode = "file"
+    else:
+        #Search KEGG list 
+        input_dict = {}
+        def request_input(mode):
+            if mode == "mdata":
+                modeterm = "module"
             else:
-                if re.search(r"\b([MKTCGRNHD]|RC)\d{5}\b", line):
-                    input.append(line)
-                else:
-                    input_invalid[line_number] = line
-                    if verbose == True:
-                        print(f"Invalid search term {line}")
+                modeterm = mode
+            url = f"https://rest.kegg.jp/list/{modeterm}"
+            input_list_file = os.path.join(dir_download, "KEGG_lists", f"{modeterm}.txt")
+            return url, input_list_file
+        #Return url and input_list_file
+        url, input_list_file = request_input(mode)
+        #Process input
+        if os.path.exists(input_list_file) == False or overwrite == True:
+            req = requests.get(url).text
+            #Write request to file
+            with open(input_list_file, "w") as filehandle:
+                filehandle.write(req)
+            inputdata = req.splitlines()
+        else:
+            with open (input_list_file, "r") as filehandle:
+                inputdata = filehandle.readlines()
+        #Process ko
+        for item in inputdata:
+            data = item.split("\t")
+            input_code = data[0]
+            input_searchterm = data[1].lower()
+            input_dict[input_code] = input_searchterm
+        #Search ko_dict for KO number or search term
+        for input_code, input_searchterm in input_dict.items():
+            infile_list = infile.split(",")
+            #Lowercase infile_list
+            infile_list = [item.lower().strip() for item in infile_list]
+            if input_code.lower() in infile_list:
+                input.append(input_code)
+                if verbose == True:
+                    print(f"Selecting {mode} entry {input_code}")
+            else:
+                for infile_term in infile_list:
+                    if infile_term.lower() in input_searchterm:
+                        input.append(input_code)
+                
+        if len(input) == 0:
+            raise SystemExit(f"No {mode} results or files were found for the searchterm {infile}")
+        else:
+            if quiet == False:
+                print(f"Error: Searching {mode} list for {infile} returned {len(input)} KEGG entries")
+        input_mode = "search"
+    return input_mode
+
 
 #----------------------------------------Process input----------------------------------------#
 #openfile()
 if mode == "ko":
-    openfile("K")
+    input_mode = openfile("K")
 elif mode == "compound":
-    openfile("C")
+    input_mode = openfile("C")
 elif mode == "reaction":
-    openfile("R")
+    input_mode = openfile("R")
 elif mode == "module":
-    openfile("M")
+    input_mode = openfile("M")
 elif mode == "mdata":
-    openfile("M")
+    input_mode = openfile("M")
 elif mode == "homolog":
-    openfile("K")
+    input_mode = openfile("K")
 input_unique = sorted([*set(input)])
 input_total = len(input)
 input_unique_total =len(input_unique)
@@ -266,7 +319,7 @@ orgdict = {}
 homolog_orglist = []
 #----------------------------------------Process orglist for homolog arguments----------------------------------------#
 def get_orglist():
-    orgfile = os.path.join(dir_download, "KEGG_entries", "organisms.txt")
+    orgfile = os.path.join(dir_download, "KEGG_lists", "organisms.txt")
     if os.path.exists(orgfile) == False or overwrite == True:
         #Retrieve the KEGG organisms list from API and save to downloads folder
         url = "https://rest.kegg.jp/list/organism"
@@ -360,7 +413,7 @@ def write_pathway_summary(filename):
 if quiet == False:
     print(f"{linebreak}KEGGChem{linebreak}")
     print("Arguments given:")
-    print(f"Mode: {mode}, Input file: {infile.name}, Output directory: {outdir}, Download directory: {dir_download}",
+    print(f"Mode: {mode}, Input mode: '{input_mode}', Input: {infile}, Output directory: {outdir}, Download directory: {dir_download}",
         f"Quiet: {quiet}, Verbose: {verbose}, Structure: {structure}",
         f"Pubchem: {pubchemarg}, SDF: {sdfarg}, Homolog: {homolog}, Homolog organism: {homologorg}",
         sep="\n")
@@ -812,7 +865,7 @@ def ko_to_compound():
 
     if quiet == False:
         print(f"{linebreak}Analysing {input_unique_total} unique KEGG orthologues from ",\
-            f"{infile.name} ({input_total} given){linebreak}", sep="")
+            f"{input_mode} {infile} ({input_total} given){linebreak}", sep="")
     
     #Iterate over all orthologues and extract reaction codes and associated compound codes
     for orthologue_id in input_unique:
@@ -1002,7 +1055,7 @@ def module_to_compound():
     
     if quiet == False:
         print(f"{linebreak}Analysing {input_unique_total} unique KEGG modules from ",\
-            f"{infile.name} ({input_total} given){linebreak}", sep="")
+            f"{input_mode} {infile} ({input_total} given){linebreak}", sep="")
     
     for module in input_unique:
         print(f"Extracting compounds from KEGG module {module}\n")
@@ -1094,7 +1147,7 @@ def compound_data():
     lst_pathways = []
 
     print(f"{linebreak}Retrieving data for {input_unique_total} unique KEGG compounds from ",\
-                    f"{infile.name} ({input_total} given){linebreak}", sep="")
+                    f"{input_mode} {infile} ({input_total} given){linebreak}", sep="")
 
     with open(os.path.join(outdir, "Results", "Compound_data.tsv"), "a") as out:
         out_csv = []
@@ -1242,7 +1295,7 @@ def reaction_data():
     lst_pathway_codes = []
 
     print(f"{linebreak}Retrieving data for {input_unique_total} unique KEGG reactions from ",\
-                    f"{infile.name} ({input_total} given){linebreak}", sep="")
+                    f"{input_mode} {infile} ({input_total} given){linebreak}", sep="")
 
     with open(os.path.join(outdir, "Results", "Equations.txt"), "w") as f_equation,\
         open(os.path.join(outdir, "Results", "Definitions.txt"), "w") as f_definition,\
@@ -1347,7 +1400,7 @@ def module_data():
 
 
     print(f"{linebreak}Retrieving data for {input_unique_total} unique KEGG modules from ",\
-                    f"{infile.name} ({input_total} given){linebreak}", sep="")
+                    f"{infile} ({input_total} given){linebreak}", sep="")
     for module in input_unique:
         get_module_data(module)
         #print(f"{module}: {moduletype}: {name}")
@@ -1366,7 +1419,7 @@ def write_log():
 
     keywords = {}
     keywords["arguments"] = args
-    keywords["infile"] = infile.name
+    keywords["infile"] = infile
     keywords['mode'] = mode
     keywords["overwrite"] = overwrite
     keywords["verbose"] = verbose
@@ -1380,12 +1433,15 @@ def write_log():
     keywords["homolog"] = homolog
     keywords["homologorg"] = homologorg
     
-    
+    if input_mode == "file":
+        input_term = os.path.abspath(infile)
+    elif input_mode == "search":
+        input_term = (infile)
     with open(os.path.join(outdir, "run_summary.txt"), "w") as outlog:
         outlog.write(f"{linebreak}KEGGChem log{linebreak}")
         outlog.write(f"Arguments: {sys.argv}\n")
         outlog.write(f"Start time: {timestamp}\nEnd time: {timestamp_end}\nRun time: {runtime}\n")
-        outlog.write(f"Input file: {os.path.abspath(infile.name)}\nMode: {mode}\nOutput directory: {os.path.abspath(outdir)}\nDownload directory: {os.path.abspath(dir_download)}\n")
+        outlog.write(f"Input mode: {input_mode}\nInput: {input_term}\nMode: {mode}\nOutput directory: {os.path.abspath(outdir)}\nDownload directory: {os.path.abspath(dir_download)}\n")
         outlog.write(f"Verbose: {verbose}\nQuiet: {quiet}\nOverwrite: {overwrite}\n\n")
         outlog.write(f"Total number of valid entries: {input_total}\nTotal number of unique entries: {input_unique_total}\nInvalid entries: {len(input_invalid)}\n")
 
