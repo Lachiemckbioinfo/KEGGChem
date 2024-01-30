@@ -391,9 +391,6 @@ def create_outdirs(dir_list):
         print(f"Create output directories {dir_list} in {outdir}")
     
 
-
-
-
 #Pathway summary writer
 #Write KEGG pathway summary
 def write_pathway_summary(filename):
@@ -403,9 +400,6 @@ def write_pathway_summary(filename):
     for key, value in dict_pathways.items():
         pathway_data.append([key, value[0], value[1]])
     pathway_writer.writerows(pathway_data)
-
-
-
 
 
 
@@ -423,9 +417,6 @@ if quiet == False:
         else:
             print(f"Filtering homolog genes by entries in file {homologfile}")
     
-
-
-
 
 
 #----------------------------------------Specific mode functions----------------------------------------#
