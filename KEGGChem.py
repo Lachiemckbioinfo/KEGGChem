@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-#version 0.9.2
+#version 0.9.3
 
 import requests
 import re
@@ -222,8 +222,10 @@ def openfile(x):
             while (line := file.readline().strip()):
                 line = line.upper()
                 line_number += 1
-                if "KO:" in line:
-                    line = line.replace("KO:", "")
+                if "KO:k" in line:
+                    line = line.replace("KO:k", "K")
+                if 'ko' in line:
+                    line = line.replace('ko', "K")
                 #If search == [LETTER] or RC + 5 digits, proceed
                 if mode != "download":
                     if re.search(rf"{x}\d{{5}}\b", line):
@@ -242,54 +244,68 @@ def openfile(x):
                             print(f"Invalid search term {line}")
         input_mode = "file"
     else:
-        #Search KEGG list 
-        input_dict = {}
-        def request_input(mode):
-            if mode == "mdata":
-                modeterm = "module"
-            else:
-                modeterm = mode
-            url = f"https://rest.kegg.jp/list/{modeterm}"
-            input_list_file = os.path.join(dir_download, "KEGG_lists", f"{modeterm}.txt")
-            return url, input_list_file
-        #Return url and input_list_file
-        url, input_list_file = request_input(mode)
-        #Process input
-        if os.path.exists(input_list_file) == False or overwrite == True:
-            req = requests.get(url).text
-            #Write request to file
-            with open(input_list_file, "w") as filehandle:
-                filehandle.write(req)
-            inputdata = req.splitlines()
-        else:
-            with open (input_list_file, "r") as filehandle:
-                inputdata = filehandle.readlines()
-        #Process ko
-        for item in inputdata:
-            data = item.split("\t")
-            input_code = data[0]
-            input_searchterm = data[1].lower()
-            input_dict[input_code] = input_searchterm
-        #Search ko_dict for KO number or search term
-        for input_code, input_searchterm in input_dict.items():
-            infile_list = infile.split(",")
-            #Lowercase infile_list
-            infile_list = [item.lower().strip() for item in infile_list]
-            if input_code.lower() in infile_list:
-                input.append(input_code)
-                if verbose == True:
-                    print(f"Selecting {mode} entry {input_code}")
-            else:
-                for infile_term in infile_list:
-                    if infile_term.lower() in input_searchterm:
-                        input.append(input_code)
+        
                 
-        if len(input) == 0:
-            raise SystemExit(f"No {mode} results or files were found for the searchterm {infile}")
+        if infile.lower() == 'all':
+            #Search KEGG list 
+            input_dict = {}
+            def request_input(mode):
+                if mode == "mdata":
+                    modeterm = "module"
+                else:
+                    modeterm = mode
+                url = f"https://rest.kegg.jp/list/{modeterm}"
+                input_list_file = os.path.join(dir_download, "KEGG_lists", f"{modeterm}.txt")
+                return url, input_list_file
+            #Return url and input_list_file
+            url, input_list_file = request_input(mode)
+            #Process input
+            if os.path.exists(input_list_file) == False or overwrite == True:
+                req = requests.get(url).text
+                #Write request to file
+                with open(input_list_file, "w") as filehandle:
+                    filehandle.write(req)
+                inputdata = req.splitlines()
+            else:
+                with open (input_list_file, "r") as filehandle:
+                    inputdata = filehandle.readlines()
+            #Process ko
+            for item in inputdata:
+                data = item.split("\t")
+                input_code = data[0]
+                input_searchterm = data[1].lower()
+                input_dict[input_code] = input_searchterm
+            #Search ko_dict for KO number or search term
+            for input_code, input_searchterm in input_dict.items():
+                infile_list = infile.split(",")
+                #Lowercase infile_list
+                infile_list = [item.lower().strip() for item in infile_list]
+                if input_code.lower() in infile_list:
+                    input.append(input_code)
+                    if verbose == True:
+                        print(f"Selecting {mode} entry {input_code}")
+                else:
+                    for infile_term in infile_list:
+                        if infile_term.lower() in input_searchterm:
+                            input.append(input_code)
+                    
+            if len(input) == 0:
+                raise SystemExit(f"No {mode} results or files were found for the searchterm {infile}")
+            else:
+                if quiet == False:
+                    print(f"Error: Searching {mode} list for {infile} returned {len(input)} KEGG entries")
+            input_mode = "search"
         else:
-            if quiet == False:
-                print(f"Error: Searching {mode} list for {infile} returned {len(input)} KEGG entries")
-        input_mode = "search"
+            inputname = infile
+            if 'KO:k' in inputname or "KO:K" in inputname:
+                inputname = inputname.replace("KO:k", "K")
+                inputname = inputname.replace("KO:K", "K")
+            if "KO" in inputname or "ko" in inputname or 'Ko' in inputname:
+                inputname = inputname.replace("KO", "K")
+                inputname = inputname.replace("ko", "K")
+                inputname = inputname.replace('Ko', "K")
+            input.append(inputname)
+            input_mode = "search"
     return input_mode
 
 
