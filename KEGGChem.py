@@ -12,6 +12,7 @@ import datetime
 import pubchempy as pcp
 import csv
 import signal
+import time
 #import logging
 
 
@@ -152,6 +153,18 @@ def timetaken():
     return runtime, timestamp_end
 
 
+
+def reqtiming(reqstart):
+    reqend = time.perf_counter()
+    reqtime = reqend-reqstart
+    ratelimit = 0.35
+    if verbose == True:
+        print(f"Request time taken: {reqend-reqstart}\n")
+    if reqtime <= ratelimit:
+        sleeptime = ratelimit - reqtime + 0.01
+        if verbose == True:
+            print(f'Sleeping for {sleeptime} seconds to abide by KEGG rate limiting requirements\n')
+        time.sleep(sleeptime)
    
 
 
@@ -261,11 +274,14 @@ def openfile(x):
             url, input_list_file = request_input(mode)
             #Process input
             if os.path.exists(input_list_file) == False or overwrite == True:
+                reqtime = time.perf_counter()
                 req = requests.get(url).text
+                reqtiming(reqtime)
                 #Write request to file
                 with open(input_list_file, "w") as filehandle:
                     filehandle.write(req)
                 inputdata = req.splitlines()
+                
             else:
                 with open (input_list_file, "r") as filehandle:
                     inputdata = filehandle.readlines()
@@ -337,16 +353,20 @@ homolog_orglist = []
 def get_orglist():
     orgfile = os.path.join(dir_download, "KEGG_lists", "organisms.txt")
     if os.path.exists(orgfile) == False or overwrite == True:
+        
         #Retrieve the KEGG organisms list from API and save to downloads folder
         url = "https://rest.kegg.jp/list/organism"
         if verbose == True:
             print(f"Downloading KEGG organisms list from {url}")
+        reqtime = time.perf_counter()
         req = requests.get(url).text
+        reqtiming(reqtime)
         with open(orgfile, "w") as handle:
             handle.write(req)
             if verbose == True:
                 print(f"Wrote KEGG organisms list to {orgfile}")
             orgdata = req.splitlines()
+        
     else:
         #Retrieve the KEGG organisms list from the downloads folder
         with open(orgfile, "r") as req:
@@ -437,36 +457,73 @@ if quiet == False:
 
 #----------------------------------------Specific mode functions----------------------------------------#
 
+#----------------Function to return pathway map codes-------------------#
+def find_pathway_maps(req):
+        map_string = re.findall(r"map\d{5}  .*", req)
+        map_codes = []
+        map_names = []
+        if len(map_string) > 0:
+            #Split pathway map names and append to dictionary
+            for map in map_string:
+                split_map = map.split("  ")
+                map_code = split_map[0]
+                map_name = split_map[1]
+                map_namecode = f"{map_code}:{map_name}"
+                if map_code not in dict_pathways:
+                    dict_pathways[map_code] = [map_name, 1]
+                else:
+                    dict_pathways[map_code][1] += 1
+                map_codes.append(map_code)
+                map_names.append(map_namecode)
+        return map_names, map_codes
+
+
+
 #--------------------KEGG KO/Module to compound--------------------
 # Function to extract reaction codes from KEGG orthologue pages
 def get_reaction_codes(KO):
     ko_file = os.path.join(dir_download, "KEGG_entries/orthologues", KO)
     #Check if file exists in download folder
     if os.path.exists(ko_file) == False or overwrite == True:
+        # Find the start tie
+        reqtime = time.perf_counter()
         url = f"https://rest.kegg.jp/get/{KO}"
         req = requests.get(url).text
+        # If request total time is less than 3 seconds, sleep remainder so that KEGG doesn't ban you
+        reqtiming(reqtime)
         #Strip everything in req from "GENES" onwards
         r = req.split(separator, 1)[0]
         with open(ko_file, "w") as file:
+            if verbose == True:
+                print(f"Wrote {KO} to file \n")
             file.write(req)
     else:
         with open(ko_file, "r") as file:
             r = file.read().split(separator, 1)[0]
-        if verbose == True:
-            print(f"Extracted {KO} from file\n")
+    if verbose == True:
+        print(f"Extracted reaction codes from {KO}\n")
 
     # Extract reaction codes using regular expressions
     reaction_codes = [*set(re.findall(r"R\d{5}", r))]
     module_codes = [*set(re.findall(r"M\d{5}", r))]
-    return reaction_codes, module_codes
+    pathway_names, pathway_codes = find_pathway_maps(r)
+    pathway_maps = [pathway_names, pathway_codes]
+    return reaction_codes, module_codes, pathway_maps
+
+
+
+
 
 #Function to retrieve genes from the list function of the KEGG API using KO codes
 def retrieve_genes_from_ko(KO):
+    
     url = f"https://rest.kegg.jp/link/genes/{KO}"
     linktext = os.path.join(dir_download, "KEGG_links/genes", KO)
     try:
         if os.path.exists(linktext) == False or overwrite == True:
+            reqtime = time.perf_counter()
             req = requests.get(url).text
+            reqtiming(reqtime)
             with open(linktext, "w") as filehandle:
                 filehandle.write(req)
                 if quiet == False:
@@ -501,7 +558,9 @@ def retrieve_genes_from_ko(KO):
             return NTSEQ_length, AASEQ_length
         
         if os.path.exists(genefile) == False:
+            gene_reqstarttime = time.perf_counter()
             gene = requests.get(geneurl).text
+            reqtiming(gene_reqstarttime)
             NTSEQ_length, AASEQ_length = collect_gene_data(gene)
             with open(genefile, "w") as handle:
                 if verbose == True:
@@ -590,8 +649,10 @@ def get_compound_codes(query_code):
         query_file = os.path.join(dir_download, "KEGG_entries/modules", query_code)
 
     if os.path.exists(query_file) == False or overwrite == True:
+        reqtime = time.perf_counter()
         url = f"http://rest.kegg.jp/get/{query_code}"
         req = requests.get(url).text
+        reqtiming(reqtime)
         #Strip everything in req from "GENES" onwards
         if mode == "ko":
             r = req.split(separator, 1)[0]
@@ -604,6 +665,7 @@ def get_compound_codes(query_code):
             file.write(req)
         if verbose == True:
             print(f"Wrote {query_code} to file\n")
+        
     else:
         with open(query_file, "r") as file:
             if mode == "ko":
@@ -626,12 +688,15 @@ def get_compound_data(compound_code):
     compound_file = os.path.join(dir_download, "KEGG_entries/compounds", compound_code)
     if os.path.exists(compound_file) == False  or overwrite == True:
         url = f"http://rest.kegg.jp/get/{compound_code}"
-        req = requests.get(url).text   
+        reqtime = time.perf_counter()
+        req = requests.get(url).text
+        reqtiming(reqtime)
         #r = req.split(separator, 1)[0]
         with open(compound_file, "w") as file:
             file.write(req)
         if verbose == True:
             print(f"Wrote {compound_code} to file\n")
+         
     else:
         with open(compound_file, "r") as file:
             req = file.read()#.split(separator, 1)[0]
@@ -659,23 +724,9 @@ def get_compound_data(compound_code):
         mol_weight = "NULL"
     
     #Retrieve pathway data
-    map_string = re.findall(r"map\d{5}  .*", req)
-    map_codes = []
-    if len(map_string) > 0:
-        #Split pathway map names and append to dictionary
-        for map in map_string:
-            split_map = map.split("  ")
-            map_code = split_map[0]
-            map_name = split_map[1]
-            if map_code not in dict_pathways:
-                dict_pathways[map_code] = [map_name, 1]
-            else:
-                dict_pathways[map_code][1] += 1
-            map_codes.append(map_code)
-        #Append map codes only to list and return
-        pathway_map = map_codes
-    else:
-        pathway_map = "NULL"
+    
+    
+    pathway_map, pathway_codes = find_pathway_maps(req)
 
     
 
@@ -703,13 +754,16 @@ def get_compound_data(compound_code):
 def get_glycan_data(glycan_code):
     compound_file = os.path.join(dir_download, "KEGG_entries/compounds", glycan_code)
     if os.path.exists(compound_file) == False or overwrite == True:
+        reqtime = time.perf_counter()
         url = f"http://rest.kegg.jp/get/{glycan_code}"
-        req = requests.get(url).text   
+        req = requests.get(url).text
+        reqtiming(reqtime)
         #r = req.split(separator, 1)[0]
         with open(compound_file, "w") as file:
             file.write(req)
         if verbose == True:
             print(f"Wrote {glycan_code} to file\n")
+        
     else:
         with open(compound_file, "r") as file:
             req = file.read()#.split(separator, 1)[0]
@@ -734,12 +788,15 @@ def get_glycan_data(glycan_code):
 def get_reaction_data(reaction_code):
     reaction_file = os.path.join(dir_download, "KEGG_entries/reactions", reaction_code)
     if os.path.exists(reaction_file) == False or overwrite == True:
+        reqtime = time.perf_counter()
         url = f"http://rest.kegg.jp/get/{reaction_code}"
         req = requests.get(url).text
+        reqtiming(reqtime)
         with open(reaction_file, "w") as file:
             file.write(req)
         if verbose == True:
             print(f"Wrote {reaction_code} to file\n")
+        
     else:
         with open (reaction_file, "r") as file:
             req = file.read()
@@ -786,8 +843,10 @@ def download_structure_files(compound_code, mode):
         urlcode = "-f+k+"
 
     if (os.path.exists(filedir) == False and os.path.exists(nulldir) == False) or overwrite == True:
+        reqtime = time.perf_counter()
         url = f"https://www.kegg.jp/entry/{urlcode}{compound_code}"
         req = requests.get(url).text
+        reqtiming(reqtime)
         if len(req) > 0:
             with open(filedir, "w") as file:
                 file.write(req)
@@ -802,6 +861,7 @@ def download_structure_files(compound_code, mode):
             mol_output = "NULL"
             if verbose == True:
                 print(f"Saved null result for {compound_code} to {nulldir}")
+        
     elif os.path.exists(filedir) == True:
         with open(filedir, "r") as file:
             req = file.read()
@@ -879,18 +939,21 @@ def ko_to_compound():
         #Print output header
         if quiet == False:
             print(f"Extracting reaction and compound codes from {orthologue_id}")
-        reaction_codes, module_codes = get_reaction_codes(orthologue_id)
+        reaction_codes, module_codes, pathway_maps = get_reaction_codes(orthologue_id)
         if verbose == True:
             print(f"Extracted reaction and module codes from {orthologue_id}")
         outfile = orthologue_id + ".txt"
         
         with open(os.path.join(outdir, "Results/Individual_results", outfile), "a") as out_all,\
         open(os.path.join(outdir, "Results", "all_reaction_results.txt"), "a") as all_reaction_results,\
-            open(os.path.join(outdir, "Results", "all_module_results.txt"), "a") as all_module_results:
+            open(os.path.join(outdir, "Results", "all_module_results.txt"), "a") as all_module_results,\
+                open(os.path.join(outdir, "Results", "all_pathway_results.txt"), "a") as all_pathway_results:
             out_all.write(f"{orthologue_id}\n")
             all_reaction_results.write(f"{orthologue_id}\n")
             all_module_results.write(f"{orthologue_id}\n")
+            all_pathway_results.write(f"{orthologue_id}:{';'.join(pathway_maps[1])}\n")
             #Iterate through reaction/module codes and retrieve compound codes before writing to file
+
             def extract_code(codetype, listname, dictionary, filename, totalcompounds, totalglycans):
                 for itemcode in codetype:
                     #If reaction alrady stored, use previously searched results
@@ -1171,7 +1234,7 @@ def compound_data():
             if mol_weight != "NULL":
                 lst_mol_weight.append(mol_weight)
             #Add pathways to list
-            if pathway_map != 'NULL':
+            if len(pathway_map) > 0:# != 'NULL':
                 for item in pathway_map:
                     lst_pathways.append(item)
                 pathways = ",".join(pathway_map)
@@ -1381,10 +1444,13 @@ def reaction_data():
 def get_module_data(module_code):
     module_file = os.path.join(dir_download, "KEGG_entries/modules", module_code)
     if os.path.exists(module_file) == False or overwrite == True:
+        reqtime = time.perf_counter()
         url = f"http://rest.kegg.jp/get/{module_code}"
         req = requests.get(url).text
+        reqtiming(reqtime)
         with open(module_file, "w") as handle:
             handle.write(req)
+        
     else:
         with open(module_file, "r") as file:
             req = file.read()
