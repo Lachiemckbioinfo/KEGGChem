@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-#version 0.9.3
+#version 0.9.4
 
 import requests
 import re
@@ -676,6 +676,10 @@ def get_compound_data(compound_code):
         pathway_map = map_codes
     else:
         pathway_map = "NULL"
+    
+    # Retrieve module/reaction data
+    reaction_codes = [*set(re.findall(r"R\d{5}", req))]
+    module_codes = [*set(re.findall(r"M\d{5}", req))]
 
     
 
@@ -698,7 +702,7 @@ def get_compound_data(compound_code):
     
 
 
-    return compound_formula, exact_mass, mol_weight, ChEBI, PubChem, pathway_map
+    return compound_formula, exact_mass, mol_weight, ChEBI, PubChem, reaction_codes, module_codes, pathway_map
 
 def get_glycan_data(glycan_code):
     compound_file = os.path.join(dir_download, "KEGG_entries/compounds", glycan_code)
@@ -1152,6 +1156,8 @@ def compound_data():
     lst_chebi = []
     lst_pubchemsid = []
     lst_pathways = []
+    lst_reaction_codes = []
+    lst_module_codes = []
 
     print(f"{linebreak}Retrieving data for {input_unique_total} unique KEGG compounds from ",\
                     f"{input_mode} {infile} ({input_total} given){linebreak}", sep="")
@@ -1160,11 +1166,12 @@ def compound_data():
         out_csv = []
         out_write = csv.writer(out, delimiter='\t')
         #out.write("Compound;formula;exact mass;molecular weight;ChEBI ID;PubChem SID;pathways\n")
-        out_header = ["compound", "formula", "exact mass", "molecular weight", "ChEBI ID", "PubChem SID", "KEGG pathways"]
+        out_header = ["compound", "formula", "exact mass", "molecular weight", "ChEBI ID", "PubChem SID",
+        "KEGG Module Codes", "KEGG Reaction Codes", "KEGG pathways"]
         #formulas.write("Compound:formula\n")
         #weight.write("compound;exact_mass;mol_weight\n")
         for compound in input_unique:
-            compound_formula,exact_mass,mol_weight, ChEBI, PubChem, pathway_map = get_compound_data(compound)
+            compound_formula,exact_mass,mol_weight, ChEBI, PubChem, reaction_codes, module_codes, pathway_map = get_compound_data(compound)
             #Add weight to lists for maths later
             if exact_mass != "NULL":
                 lst_exact_mass.append(exact_mass)
@@ -1202,7 +1209,22 @@ def compound_data():
                     lst_pubchemsid.append(item)
             else:
                 pubchem = "NULL"
-            out_data = [compound, compound_formula, exact_mass, mol_weight, chebi, pubchem, pathways]
+            
+            if reaction_codes != 'NULL':
+                reactions = ";".join(reaction_codes)
+                for item in reactions:
+                    lst_reaction_codes.append(item)
+            else:
+                reactions = "NULL"
+
+            if module_codes != "NULL":
+                modules = ";".join(module_codes)
+                for item in modules:
+                    lst_module_codes.append(item)
+            else:
+                modules = "NULL"
+
+            out_data = [compound, compound_formula, exact_mass, mol_weight, chebi, pubchem, modules, reactions, pathways]
             out_csv.append(out_data)
             #out.write(f"{compound};{compound_formula};{exact_mass};{mol_weight};{chebi};{pubchem};{pathways}\n")
 
