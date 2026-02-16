@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-#version 0.9.3
+#version 0.9.4
 
 import requests
 import re
@@ -12,14 +12,17 @@ import datetime
 import pubchempy as pcp
 import csv
 import signal
+import time
 #import logging
+#import pandas # For saving via dataframes
 
 
 github = "https://github.com/Lachiemckbioinfo/KEGGChem"
 citation = "XXXXX"
 #KEGGcitation = (f"KEGG citation goes here")
 appname = 'KEGGChem'
-version = 'KEGGChem 0.9.2'
+version = 'KEGGChem 0.9.4'
+
 
 
 
@@ -103,6 +106,16 @@ parser.add_argument("-w", "--overwrite",
                     help = "Download and overwrite stored files. Default = False.",
                     action = "store_true")
 
+parser.add_argument("--get_ko",
+                    required=False,
+                    help = "Retrieve KO data from compounds or modules. Default = False",
+                    action = "store_true")
+
+parser.add_argument("--enzyme",
+                    required=False,
+                    help = "Retrieve enzyme data, and resulting KOs, from compounds. Default=False",
+                    action = "store_true")
+
 
 
 
@@ -122,6 +135,20 @@ group.add_argument("--verbose",
 
 
 
+# Global variables
+linebreak = f"\n{'-'*100}\n"
+CANCEL_REQUESTED = False
+# Timeout tuple
+TIMEOUT = (5, 20)
+
+# Cancel helper function
+def _cancel_loop():
+    global CANCEL_REQUESTED
+    CANCEL_REQUESTED = True
+    if not quiet:
+        print("[INFO]: Cancellation requested - stopping before next item")
+
+
 #Parse argparse parser parse
 args = parser.parse_args()
 mode = args.mode
@@ -135,9 +162,11 @@ homolog = args.homolog
 homologorg = args.homologorg
 overwrite = args.overwrite
 download = args.download
+get_ko = args.get_ko
+get_enzymes = args.enzyme
 
 
-linebreak = f"\n{'-'*100}\n"
+
 
 
 #Set start and finish times with datetime
@@ -151,8 +180,16 @@ def timetaken():
     runtime = endtime - starttime
     return runtime, timestamp_end
 
-
-   
+# Function to handle limiting calls to the API limit
+API_WAIT = 0.35 # KEGG API limits calls to 3 per second
+def _api_sleep(start, end, api_wait=API_WAIT, skip=False):
+    timetaken = end - start
+    # Skip parameter allows a function to include some logic for skipping the wait
+    if not skip:
+        if timetaken < api_wait:
+            if verbose:
+                print(f"Limiting API access rate. Sleeping {(api_wait - timetaken):.4f} seconds")
+            time.sleep(api_wait - timetaken)   
 
 
 
@@ -207,7 +244,8 @@ for item in dirs:
     os.makedirs(path, exist_ok = True)
 
 #Set separator (aka ignore everything after separator to avoid false positives)
-if mode == "ko" or mode == "module":
+#if mode == "ko" or mode == "module":
+if mode in ["ko", "module", "compound"]:
     separator = "GENES"
  
 
@@ -250,12 +288,15 @@ def openfile(x):
             #Search KEGG list 
             input_dict = {}
             def request_input(mode):
+                start = time.perf_counter()
                 if mode == "mdata":
                     modeterm = "module"
                 else:
                     modeterm = mode
                 url = f"https://rest.kegg.jp/list/{modeterm}"
                 input_list_file = os.path.join(dir_download, "KEGG_lists", f"{modeterm}.txt")
+                end = time.perf_counter()
+                _api_sleep(start, end)
                 return url, input_list_file
             #Return url and input_list_file
             url, input_list_file = request_input(mode)
@@ -336,19 +377,26 @@ homolog_orglist = []
 #----------------------------------------Process orglist for homolog arguments----------------------------------------#
 def get_orglist():
     orgfile = os.path.join(dir_download, "KEGG_lists", "organisms.txt")
+    downloaded = False
     if os.path.exists(orgfile) == False or overwrite == True:
         #Retrieve the KEGG organisms list from API and save to downloads folder
+        start = time.perf_counter()
         url = "https://rest.kegg.jp/list/organism"
         if verbose == True:
             print(f"Downloading KEGG organisms list from {url}")
-        req = requests.get(url).text
+        req = requests.get(url, timeout=TIMEOUT).text
         with open(orgfile, "w") as handle:
             handle.write(req)
             if verbose == True:
                 print(f"Wrote KEGG organisms list to {orgfile}")
             orgdata = req.splitlines()
+        
+        # timetaken = end - start
+        # if timetaken > API_WAIT:
+        #     time.sleep(API_WAIT - timetaken)
     else:
         #Retrieve the KEGG organisms list from the downloads folder
+        downloaded=True
         with open(orgfile, "r") as req:
             if verbose == True:
                 print(f"Reading KEGG organisms list from {orgfile}")
@@ -360,6 +408,9 @@ def get_orglist():
         orgcode = data[1]
         orgstring = f"{data[0]};{data[2]};{data[3]}"
         orgdict[orgcode] = orgstring
+
+    end = time.perf_counter()
+    _api_sleep(start, end, skip=downloaded)
 
 
 
@@ -440,16 +491,20 @@ if quiet == False:
 #--------------------KEGG KO/Module to compound--------------------
 # Function to extract reaction codes from KEGG orthologue pages
 def get_reaction_codes(KO):
+    downloaded = False
     ko_file = os.path.join(dir_download, "KEGG_entries/orthologues", KO)
     #Check if file exists in download folder
     if os.path.exists(ko_file) == False or overwrite == True:
+        start = time.perf_counter()
         url = f"https://rest.kegg.jp/get/{KO}"
-        req = requests.get(url).text
+        req = requests.get(url, timeout=TIMEOUT).text
         #Strip everything in req from "GENES" onwards
         r = req.split(separator, 1)[0]
         with open(ko_file, "w") as file:
             file.write(req)
+        
     else:
+        downloaded = True
         with open(ko_file, "r") as file:
             r = file.read().split(separator, 1)[0]
         if verbose == True:
@@ -458,20 +513,28 @@ def get_reaction_codes(KO):
     # Extract reaction codes using regular expressions
     reaction_codes = [*set(re.findall(r"R\d{5}", r))]
     module_codes = [*set(re.findall(r"M\d{5}", r))]
+    end = time.perf_counter()
+    _api_sleep(start, end, skip=downloaded)
     return reaction_codes, module_codes
+
+
 
 #Function to retrieve genes from the list function of the KEGG API using KO codes
 def retrieve_genes_from_ko(KO):
+    downloaded = False
     url = f"https://rest.kegg.jp/link/genes/{KO}"
     linktext = os.path.join(dir_download, "KEGG_links/genes", KO)
     try:
         if os.path.exists(linktext) == False or overwrite == True:
-            req = requests.get(url).text
+            start = time.perf_counter()
+            req = requests.get(url, timeout=TIMEOUT).text
             with open(linktext, "w") as filehandle:
                 filehandle.write(req)
                 if quiet == False:
                     print(f"Writing KO and gene links to file {linktext}")
+            
         else:
+            downloaded = True
             with open(linktext, "r") as filehandle:
                 req = filehandle.read()
                 if quiet == False:
@@ -487,6 +550,8 @@ def retrieve_genes_from_ko(KO):
     
     #Function to retrieve genes. Functioned so that it can be modified for homologfile command
     def retrieve_gene(genename):
+        genestart = time.time()
+        gene_downloaded = False
         geneurl = f"https://rest.kegg.jp/get/{genename}"
         genefile = os.path.join(dir_download, "KEGG_entries/genes", genename)
 
@@ -501,14 +566,17 @@ def retrieve_genes_from_ko(KO):
             return NTSEQ_length, AASEQ_length
         
         if os.path.exists(genefile) == False:
-            gene = requests.get(geneurl).text
+            start = time.perf_counter()
+            gene = requests.get(geneurl, timeout=TIMEOUT).text
             NTSEQ_length, AASEQ_length = collect_gene_data(gene)
             with open(genefile, "w") as handle:
                 if verbose == True:
                     print(f"Writing gene {genename} to file {genefile}")
                 handle.write(gene)
                 gene_dict[genename] = [gene, NTSEQ_length, AASEQ_length] 
+            
         else:
+            gene_downloaded = True
             with open(genefile, "r") as handle:
                 gene = handle.read()
                 NTSEQ_length, AASEQ_length = collect_gene_data(gene)
@@ -517,6 +585,9 @@ def retrieve_genes_from_ko(KO):
                 gene_dict[genename] = [gene, NTSEQ_length, AASEQ_length]
         if quiet == False:
             print(f"Retrieved gene {genename} ({genecount}/{length})")
+        geneend = time.time()
+        # Wait API_WAIT seconds if needed. Don't make KEGG team angry
+        _api_sleep(genestart, geneend, skip=gene_downloaded)
     
     #Parse lines using the retrieve_gene function
     genenames = []
@@ -536,16 +607,25 @@ def retrieve_genes_from_ko(KO):
                     print(f"{genename} ignored as it was not in the organism list")
         #retrieve_gene(genename)
         genecount += 1
+    end = time.perf_counter()
+    _api_sleep(start, end, skip=Downloaded)
     return gene_dict, genenames
 
 
+
+    
 #Homolog extraction
 def extract_homolog(homolog_dict):
+    global CANCEL_REQUESTED
     if quiet == False:
         print(f"{linebreak}Extracting homolog data from orthologues{linebreak}")
     count_current = 1
     ko_genecount = {}
     for orthologue_id in input_unique:
+        if CANCEL_REQUESTED:
+            _cancel_loop()
+            break
+
         if quiet == False:
             print(f"{linebreak}Retrieving genes for {orthologue_id} ({count_current}/{input_unique_total})")
         
@@ -570,6 +650,9 @@ def extract_homolog(homolog_dict):
                 with open(os.path.join(outdir, "Results/Genes", "KOs_without_genes.txt"), "a") as filehandle:
                     filehandle.write(f"{orthologue_id}\n")
             
+        except KeyboardInterrupt:
+            _cancel_loop()
+            break
         except:
             print(f"Error: Failed to retrieve genes for {orthologue_id}\n")
         
@@ -583,15 +666,17 @@ def extract_homolog(homolog_dict):
 
 # Function to retrieve compound/glycan codes associated with a reaction or module code
 def get_compound_codes(query_code):
+    downloaded = False
     #Ensure that queries are saved to/loaded from the correct directory
     if re.search(rf"R\d{{5}}\b", query_code):
         query_file = os.path.join(dir_download, "KEGG_entries/reactions", query_code)
     elif re.search(rf"M\d{{5}}\b", query_code):
         query_file = os.path.join(dir_download, "KEGG_entries/modules", query_code)
-
+    start = time.perf_counter()
     if os.path.exists(query_file) == False or overwrite == True:
+        
         url = f"http://rest.kegg.jp/get/{query_code}"
-        req = requests.get(url).text
+        req = requests.get(url, timeout=TIMEOUT).text
         #Strip everything in req from "GENES" onwards
         if mode == "ko":
             r = req.split(separator, 1)[0]
@@ -604,7 +689,9 @@ def get_compound_codes(query_code):
             file.write(req)
         if verbose == True:
             print(f"Wrote {query_code} to file\n")
+        
     else:
+        downloaded = True
         with open(query_file, "r") as file:
             if mode == "ko":
                 r = file.read().split(separator, 1)[0]
@@ -618,15 +705,101 @@ def get_compound_codes(query_code):
             print(f"Extracted {query_code} from file\n")
     #Extract compound codes from page
     compound_codes = [*set(re.findall(r"\b[CG]\d{5}\b", r))]
+    end = time.perf_counter()
+    _api_sleep(start, end, skip=downloaded)
     return compound_codes
+
+# Function to retrieve KO codes from module/reaction
+def get_ko_codes(query_code):
+    downloaded = False
+
+    # Ensure enzymes folder exists (safe if it already exists)
+    enzymes_dir = os.path.join(dir_download, "KEGG_entries/enzymes")
+    if not os.path.exists(enzymes_dir):
+        os.makedirs(enzymes_dir, exist_ok=True)
+
+    # Normalise enzyme codes (allow "1.1.1.1" or "ec:1.1.1.1")
+    if re.search(r"^\d+\.\d+\.\d+\.[\d-]+$", query_code):
+        query_code = f"ec:{query_code}"
+
+    # Build a filesystem-safe filename (":" is annoying cross-platform) - for enzymes codes
+    safe_code = query_code.replace(":", "_")
+    
+    #query_file = os.path.join(dir_download, "KEGG_entries/orthologues", query_code)
+    if re.search(rf"R\d{{5}}\b", query_code):
+        query_file = os.path.join(dir_download, "KEGG_entries/reactions", query_code)
+    elif re.search(rf"M\d{{5}}\b", query_code):
+        query_file = os.path.join(dir_download, "KEGG_entries/modules", query_code)
+    elif re.search(r"^ec:\d+\.\d+\.\d+\.[\d-]+$", query_code):
+        query_file = os.path.join(dir_download, "KEGG_entries/enzymes", safe_code)
+    else:
+        # Fallback so query_file is always defined
+        query_file = os.path.join(dir_download, "KEGG_entries/orthologues", safe_code)
+
+    start = time.perf_counter()
+    if not os.path.exists(query_file) or overwrite == True:
+        
+        url = f"http://rest.kegg.jp/get/{query_code}"
+        req = requests.get(url, timeout=TIMEOUT).text
+        # Strip everything in req from "GENES onwards"
+        r = req.split(separator, 1)[0]
+        with open(query_file, "w") as file:
+            file.write(req)
+        if verbose:
+            print(f"Wrote {query_code} to file\n")
+    else:
+        downloaded = True
+        with open(query_file, "r") as file:
+            r = file.read().split(separator, 1)[0]
+        if verbose:
+            print(f"Extracted {query_code} from file\n")
+    
+    # Extract ko codes from req
+    ko_codes = [*set(re.findall(r"\bK\d{5}\b", r))]
+    end = time.perf_counter()
+    _api_sleep(start, end, skip=downloaded)
+    return ko_codes
+
+# Retrieve KOs based on reaction or module lists
+def extract_kos(query_list):
+    global CANCEL_REQUESTED
+    ko_dict = {}
+    ko_list = []
+    length = len(query_list)
+    for index, item in enumerate(query_list):
+        if CANCEL_REQUESTED:
+            _cancel_loop()
+            break
+        try:
+            ko_codes = get_ko_codes(item)
+        except KeyboardInterrupt:
+            _cancel_loop()
+            break
+        if len(ko_codes) == 0:
+            ko_codes = "NULL"
+            ko_dict[item] = "NULL"
+        else:
+            # FIX: extend with strings, not a generator
+            ko_list.extend(list(set(ko_codes)))
+            if item not in ko_dict:
+                ko_dict[item] = ko_codes
+        if not quiet:
+            print(f"Extracted KO codes from {item} ({index}/{length})")
+    # Make list unique
+    ko_list = [*set(ko_list)] #list(set(ko_list))
+    return ko_dict, ko_list
+
 
 
 #Function to retrieve compound data from compound codes
 def get_compound_data(compound_code):
+    global CANCEL_REQUESTED
+    downloaded = False
+    start = time.perf_counter()
     compound_file = os.path.join(dir_download, "KEGG_entries/compounds", compound_code)
     if os.path.exists(compound_file) == False  or overwrite == True:
         url = f"http://rest.kegg.jp/get/{compound_code}"
-        req = requests.get(url).text   
+        req = requests.get(url, timeout=TIMEOUT).text   
         #r = req.split(separator, 1)[0]
         with open(compound_file, "w") as file:
             file.write(req)
@@ -637,6 +810,7 @@ def get_compound_data(compound_code):
             req = file.read()#.split(separator, 1)[0]
         if verbose == True:
             print(f"Extracting {compound_code} from file")
+        downloaded = True
     #Retrieve compound formula
     formula_string = re.findall(r"FORMULA     .*", req)
     if len(formula_string) > 0:
@@ -676,7 +850,46 @@ def get_compound_data(compound_code):
         pathway_map = map_codes
     else:
         pathway_map = "NULL"
+    
+    # Retrieve module/reaction data
+    reaction_codes = [*set(re.findall(r"R\d{5}", req))]
+    module_codes = [*set(re.findall(r"M\d{5}", req))]
 
+    
+
+    if get_enzymes:
+        # Retrieve enzyme (EC) codes
+        # ENZYME lines can wrap onto subsequent indented lines
+        enzyme_lines = re.findall(r"^(?:ENZYME\s+|\s{12,})(.*)$", req, flags=re.MULTILINE)
+        if len(enzyme_lines) > 0:
+            enzyme_blob = " ".join(enzyme_lines)
+            # EC format: each of the 4 fields may be digits or '-'
+            enzyme_codes = [*set(re.findall(r"\b(?:\d+|-)\.(?:\d+|-)\.(?:\d+|-)\.(?:\d+|-)\b", enzyme_blob))]
+        else:
+            enzyme_codes = "NULL"
+
+
+        if enzyme_codes != "NULL":
+            enzyme_ec_codes = [f"ec:{ec}" for ec in enzyme_codes if "-" not in ec]
+            ko_from_enzymes_dict, ko_from_enzymes_lst = extract_kos(enzyme_ec_codes)
+            ko_from_enzymes = [ko_from_enzymes_dict, ko_from_enzymes_lst]
+        else:
+            ko_from_enzymes = ["NULL", "NULL"]
+
+    else:
+        ko_from_enzymes = None
+
+    if get_ko:
+        
+        ko_from_modules_dict, ko_from_modules_lst = extract_kos(module_codes)
+        ko_from_reactions_dict, ko_from_reactions_lst = extract_kos(reaction_codes)
+
+        ko_from_modules = [ko_from_modules_dict, ko_from_modules_lst]
+        ko_from_reactions = [ko_from_reactions_dict, ko_from_reactions_lst]
+    else:
+        ko_from_modules = None
+        ko_from_reactions = None
+        
     
 
     #Retrieve database data (ChEBI, PubChem)
@@ -695,16 +908,18 @@ def get_compound_data(compound_code):
             return "NULL"            
     ChEBI = find_database_data("ChEBI")
     PubChem = find_database_data("PubChem")
+
+    end = time.perf_counter()
+    _api_sleep(start, end, skip=downloaded)
     
 
-
-    return compound_formula, exact_mass, mol_weight, ChEBI, PubChem, pathway_map
+    return compound_formula, exact_mass, mol_weight, ChEBI, PubChem, reaction_codes, module_codes, enzyme_codes, pathway_map, ko_from_modules, ko_from_reactions, ko_from_enzymes
 
 def get_glycan_data(glycan_code):
     compound_file = os.path.join(dir_download, "KEGG_entries/compounds", glycan_code)
     if os.path.exists(compound_file) == False or overwrite == True:
         url = f"http://rest.kegg.jp/get/{glycan_code}"
-        req = requests.get(url).text   
+        req = requests.get(url, timeout=TIMEOUT).text   
         #r = req.split(separator, 1)[0]
         with open(compound_file, "w") as file:
             file.write(req)
@@ -735,7 +950,7 @@ def get_reaction_data(reaction_code):
     reaction_file = os.path.join(dir_download, "KEGG_entries/reactions", reaction_code)
     if os.path.exists(reaction_file) == False or overwrite == True:
         url = f"http://rest.kegg.jp/get/{reaction_code}"
-        req = requests.get(url).text
+        req = requests.get(url, timeout=TIMEOUT).text
         with open(reaction_file, "w") as file:
             file.write(req)
         if verbose == True:
@@ -787,7 +1002,7 @@ def download_structure_files(compound_code, mode):
 
     if (os.path.exists(filedir) == False and os.path.exists(nulldir) == False) or overwrite == True:
         url = f"https://www.kegg.jp/entry/{urlcode}{compound_code}"
-        req = requests.get(url).text
+        req = requests.get(url, timeout=TIMEOUT).text
         if len(req) > 0:
             with open(filedir, "w") as file:
                 file.write(req)
@@ -855,6 +1070,7 @@ def ko_to_homolog():
 
 #----------------------------------------Function - Run KO to compound----------------------------------------#
 def ko_to_compound():
+    global CANCEL_REQUESTED
     #Create outdir structure
     dir_list = ["Results/Individual_results", "Summaries"]
     if homolog == True:
@@ -876,6 +1092,9 @@ def ko_to_compound():
     
     #Iterate over all orthologues and extract reaction codes and associated compound codes
     for orthologue_id in input_unique:
+        if CANCEL_REQUESTED:
+            _cancel_loop()
+            break
         #Print output header
         if quiet == False:
             print(f"Extracting reaction and compound codes from {orthologue_id}")
@@ -939,28 +1158,43 @@ def ko_to_compound():
     reaction_glycans_unique = sorted([*set(reaction_glycan_list)])
     module_glycans_unique = sorted([*set(module_glycan_list)])
 
+
     #Write unique compounds to list
-    with open(os.path.join(outdir, "Results", "compounds.txt"), "w") as result,\
-        open(os.path.join(outdir, "Results", "glycans.txt"), "w") as glycans,\
-            open(os.path.join(outdir,"Results","reactions.txt"), "w") as reactions,\
-                open(os.path.join(outdir, "Results", "compounds_from_reactions.txt"), "w") as reaction_compounds,\
-                    open(os.path.join(outdir, "Results", "compounds_from_modules.txt"), "w") as module_compounds,\
-                        open(os.path.join(outdir, "Results", "glycans_from_reactions.txt"), "w") as reaction_glycans,\
-                            open(os.path.join(outdir, "Results", "glycans_from_modules.txt"), "w") as module_glycans:
-        for compound in compounds_unique:
-            result.write(f"{compound}\n")
-        for glycan in glycans_unique:
-            glycans.write(f"{glycan}\n")
-        for reaction in reactions_unique:
-            reactions.write(f"{reaction}\n")
-        for compound in reaction_compounds_unique:
-            reaction_compounds.write(f"{compound}\n")
-        for compound in module_compounds_unique:
-            module_compounds.write(f"{compound}\n")
-        for glycan in reaction_glycans_unique:
-            reaction_glycans.write(f"{glycan}\n")
-        for glycan in module_glycans_unique:
-            module_glycans.write(f"{glycan}\n")
+    def write_results_file(outdir, folder, filename, itemlist):
+        with open(os.path.join(outdir, folder, filename), "w") as result:
+            for item in itemlist:
+                results.write(f"{item}\n")
+
+    write_results_file(outdir, "Results", "compounds.txt", compounds_unique)
+    write_results_file(outdir, "Results", "glycans.txt", glycans_unique)
+    write_results_file(outdir, "Results", "reactions.txt", reactions_unique)
+    write_results_file(outdir, "Results", "compounds_from_reactions.txt", reaction_compounds_unique)
+    write_results_file(outdir, "Results", "compounds_from_modules.txt", module_compounds_unique)
+    write_results_file(outdir, "Results", "glycans_from_reactions.txt", reaction_glycans_unique)
+    write_results_file(outdir, "Results", "glycans_from_modules.txt", module_glycans_unique)
+
+    # #Write unique compounds to list
+    # with open(os.path.join(outdir, "Results", "compounds.txt"), "w") as result,\
+    #     open(os.path.join(outdir, "Results", "glycans.txt"), "w") as glycans,\
+    #         open(os.path.join(outdir,"Results","reactions.txt"), "w") as reactions,\
+    #             open(os.path.join(outdir, "Results", "compounds_from_reactions.txt"), "w") as reaction_compounds,\
+    #                 open(os.path.join(outdir, "Results", "compounds_from_modules.txt"), "w") as module_compounds,\
+    #                     open(os.path.join(outdir, "Results", "glycans_from_reactions.txt"), "w") as reaction_glycans,\
+    #                         open(os.path.join(outdir, "Results", "glycans_from_modules.txt"), "w") as module_glycans:
+    #     for compound in compounds_unique:
+    #         result.write(f"{compound}\n")
+    #     for glycan in glycans_unique:
+    #         glycans.write(f"{glycan}\n")
+    #     for reaction in reactions_unique:
+    #         reactions.write(f"{reaction}\n")
+    #     for compound in reaction_compounds_unique:
+    #         reaction_compounds.write(f"{compound}\n")
+    #     for compound in module_compounds_unique:
+    #         module_compounds.write(f"{compound}\n")
+    #     for glycan in reaction_glycans_unique:
+    #         reaction_glycans.write(f"{glycan}\n")
+    #     for glycan in module_glycans_unique:
+    #         module_glycans.write(f"{glycan}\n")
 
     total_compounds_dict = dict(Counter(total_compounds_list))
     compounds_count = len(total_compounds_dict)
@@ -1055,6 +1289,7 @@ def ko_to_compound():
 
 #----------------------------------------Function - Run module to compound----------------------------------------#
 def module_to_compound():
+    global CANCEL_REQUESTED
     count_current = 1
     #Create outdir structure
     dir_list = ["Results/Individual_results", "Summaries"]
@@ -1065,24 +1300,31 @@ def module_to_compound():
             f"{input_mode} {infile} ({input_total} given){linebreak}", sep="")
     
     for module in input_unique:
+        # Polite cancel
+        if CANCEL_REQUESTED:
+            _cancel_loop()
+            break
         print(f"Extracting compounds from KEGG module {module}\n")
         compound_codes = get_compound_codes(module)
         outfile = f"{module}.txt"
-
-        with open(os.path.join(outdir, "Results/Individual_results", outfile),"a") as result,\
-                open(os.path.join(outdir, "Results", "all_results.txt"), "a") as summary:
-                    #Write file header
-                    for compound_code in compound_codes:
-                        if compound_code[0] == "C":
-                            total_compounds_list.append(compound_code)
-                        elif compound_code[0] == "G":
-                            total_glycans_list.append(compound_code)
-                        
-                    result.write(f"{module}: {','.join(compound_codes)}\n")
-                    summary.write(f"{module}: {','.join(compound_codes)}\n")
-                    if quiet == False:
-                        print(f"Extracted compound codes from {module} ({count_current}/{input_unique_total}){linebreak}")
-                    count_current += 1
+        try:
+            with open(os.path.join(outdir, "Results/Individual_results", outfile),"a") as result,\
+                    open(os.path.join(outdir, "Results", "all_results.txt"), "a") as summary:
+                        #Write file header
+                        for compound_code in compound_codes:
+                            if compound_code[0] == "C":
+                                total_compounds_list.append(compound_code)
+                            elif compound_code[0] == "G":
+                                total_glycans_list.append(compound_code)
+                            
+                        result.write(f"{module}: {','.join(compound_codes)}\n")
+                        summary.write(f"{module}: {','.join(compound_codes)}\n")
+                        if quiet == False:
+                            print(f"Extracted compound codes from {module} ({count_current}/{input_unique_total}){linebreak}")
+                        count_current += 1
+        except KeyboardInterrupt:
+            _cancel_loop()
+            break
 
     compounds_unique = sorted([*set(total_compounds_list)])
     glycans_unique = sorted([*set(total_glycans_list)])
@@ -1152,6 +1394,22 @@ def compound_data():
     lst_chebi = []
     lst_pubchemsid = []
     lst_pathways = []
+    lst_reaction_codes = []
+    lst_module_codes = []
+    lst_ko_module = []
+    lst_ko_reaction = []
+    lst_enzyme_codes = []
+    lst_ko_enzyme = []
+    
+    
+    enzymes = []
+    reactions = []
+    modules = []
+    module_kos = []
+    reaction_kos = []
+    
+
+
 
     print(f"{linebreak}Retrieving data for {input_unique_total} unique KEGG compounds from ",\
                     f"{input_mode} {infile} ({input_total} given){linebreak}", sep="")
@@ -1160,11 +1418,14 @@ def compound_data():
         out_csv = []
         out_write = csv.writer(out, delimiter='\t')
         #out.write("Compound;formula;exact mass;molecular weight;ChEBI ID;PubChem SID;pathways\n")
-        out_header = ["compound", "formula", "exact mass", "molecular weight", "ChEBI ID", "PubChem SID", "KEGG pathways"]
+        out_header = ["compound", "formula", "exact mass", "molecular weight", "ChEBI ID", "PubChem SID",
+        "KEGG Module Codes", "KEGG Reaction Codes", "KEGG Enzyme Codes", "KO from modules", "KO from reactions", "KO from enzymes", "KEGG pathways"]
         #formulas.write("Compound:formula\n")
         #weight.write("compound;exact_mass;mol_weight\n")
         for compound in input_unique:
-            compound_formula,exact_mass,mol_weight, ChEBI, PubChem, pathway_map = get_compound_data(compound)
+            compound_formula,exact_mass,mol_weight, ChEBI, PubChem, reaction_codes, module_codes, enzyme_codes, pathway_map, ko_from_module, ko_from_reaction, ko_from_enzyme = get_compound_data(compound)
+                
+            
             #Add weight to lists for maths later
             if exact_mass != "NULL":
                 lst_exact_mass.append(exact_mass)
@@ -1202,7 +1463,55 @@ def compound_data():
                     lst_pubchemsid.append(item)
             else:
                 pubchem = "NULL"
-            out_data = [compound, compound_formula, exact_mass, mol_weight, chebi, pubchem, pathways]
+            
+            if reaction_codes != 'NULL':
+                reactions = ";".join(reaction_codes)
+                for item in reaction_codes:
+                    lst_reaction_codes.append(item)
+            else:
+                reactions = "NULL"
+
+            if module_codes != "NULL":
+                modules = ";".join(module_codes)
+                for item in module_codes:
+                    lst_module_codes.append(item)
+            else:
+                modules = "NULL"
+            if get_ko:
+                ko_module = ko_from_module[1]
+                ko_reaction = ko_from_reaction[1]
+                if ko_module != "NULL":
+                    module_kos = ";".join(ko_module)
+                    for item in ko_module:
+                        lst_ko_module.append(item)
+                else:
+                    module_kos = "NULL"
+                
+                if ko_reaction != "NULL":
+                    reaction_kos = ";".join(ko_reaction)
+                    for item in ko_reaction:
+                        lst_ko_reaction.append(item)
+                else:
+                    reaction_kos = "NULL"
+            # Enzyme codes
+            if get_enzymes:
+                ko_enzyme = ko_from_enzyme[1]
+                if enzyme_codes != "NULL":
+                    enzymes = ";".join(enzyme_codes)
+                    for item in enzyme_codes:
+                        lst_enzyme_codes.append(item)
+                else:
+                    enzymes = "NULL"
+                # KO codes extracted from enzymes
+                if ko_enzyme != "NULL":
+                    enzyme_kos = ";".join(ko_enzyme)
+                    for item in ko_enzyme:
+                        lst_ko_enzyme.append(item)
+                else:
+                    enzyme_kos = "NULL"
+
+
+            out_data = [compound, compound_formula, exact_mass, mol_weight, chebi, pubchem, modules, reactions, enzymes, module_kos, reaction_kos, enzyme_kos, pathways]
             out_csv.append(out_data)
             #out.write(f"{compound};{compound_formula};{exact_mass};{mol_weight};{chebi};{pubchem};{pathways}\n")
 
