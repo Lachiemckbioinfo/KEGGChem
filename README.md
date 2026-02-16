@@ -5,7 +5,6 @@ KEGGChem is a Python program for the batch retrieval of KEGG compound details us
 
 ## Dependencies
 KEGGChem requires the following Python libraries:
-+ collections
 + requests
 + PubChemPy
 
